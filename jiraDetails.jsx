@@ -17,6 +17,7 @@ import {
   saveJiraConfig,
   testJiraConnection,
   getJiraBugs,
+  getJiraFeatures,
 } from "../api/jira";
 
 
@@ -156,8 +157,10 @@ setProdLabels(
 }
 
 useEffect(() => {
-  loadFeatures();
-}, [featurePage]);
+  if (configured) {
+    loadFeatures();
+  }
+}, [configured, featurePage]);
 
   async function loadBugs(searchValue = search) {
     try {
@@ -285,6 +288,7 @@ if (prodLabels.length === 0) {
 
       // Load Jira issues after saving
       await loadBugs("");
+      await loadFeatures();
 
     } catch (err) {
       console.error(
@@ -362,6 +366,7 @@ if (prodLabels.length === 0) {
 
     if (configured) {
       await loadBugs(search);
+      await loadFeatures();
     }
   }
 
@@ -459,6 +464,45 @@ if (prodLabels.length === 0) {
       /\/$/,
       ""
     )}/browse/${jiraId}`;
+  }
+
+
+  // ============================================================
+  // Feature helpers
+  // ============================================================
+
+  function getFeatureValue(feature, ...keys) {
+    for (const key of keys) {
+      if (
+        feature?.[key] !== undefined &&
+        feature?.[key] !== null &&
+        feature?.[key] !== ""
+      ) {
+        return feature[key];
+      }
+    }
+    return "-";
+  }
+
+  function getFeatureUrl(feature) {
+    const jiraId = getFeatureValue(feature, "jira_id", "key", "id");
+    return jiraId !== "-" ? getJiraIssueUrl(jiraId) : "#";
+  }
+
+  function getFeatureStatus(feature) {
+    return getFeatureValue(feature, "status", "state");
+  }
+
+  function getFeaturePriority(feature) {
+    return getFeatureValue(feature, "priority");
+  }
+
+  function getFeatureAssignee(feature) {
+    return getFeatureValue(feature, "assignee", "assigned_to");
+  }
+
+  function getFeatureReporter(feature) {
+    return getFeatureValue(feature, "reporter", "created_by");
   }
 
   // ============================================================
@@ -1321,6 +1365,242 @@ if (prodLabels.length === 0) {
 
       </div>
 
+    </div>
+  );
+}
+
+
+        {/* ====================================================
+            Jira Features
+        ===================================================== */}
+
+        {configured && (
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm mt-6">
+
+            {/* Features header */}
+            <div className="px-6 py-5 border-b border-gray-200">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900">
+                    Jira Features
+                  </h2>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Features retrieved from Jira for this project.
+                  </p>
+                </div>
+
+                <div className="text-sm text-gray-500">
+                  Total:{" "}
+                  <span className="font-semibold text-gray-900">
+                    {featureTotal}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {loadingFeatures && (
+              <div className="py-12 flex items-center justify-center gap-3 text-gray-500">
+                <RefreshCw size={20} className="animate-spin" />
+                Loading Jira features...
+              </div>
+            )}
+
+            {!loadingFeatures && features.length === 0 && (
+              <div className="px-6 py-14 text-center">
+                <div className="mx-auto w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-4">
+                  <Search size={22} className="text-gray-400" />
+                </div>
+                <h3 className="text-sm font-semibold text-gray-900">
+                  No features found
+                </h3>
+                <p className="text-sm text-gray-500 mt-1">
+                  There are no Jira features available for this project.
+                </p>
+              </div>
+            )}
+
+            {!loadingFeatures && features.length > 0 && (
+              <>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50 border-y border-gray-200">
+                      <tr>
+                        <th className="text-left px-6 py-3 font-semibold text-gray-600 whitespace-nowrap">
+                          Jira ID
+                        </th>
+                        <th className="text-left px-4 py-3 font-semibold text-gray-600 min-w-[300px]">
+                          Summary
+                        </th>
+                        <th className="text-left px-4 py-3 font-semibold text-gray-600 whitespace-nowrap">
+                          Status
+                        </th>
+                        <th className="text-left px-4 py-3 font-semibold text-gray-600 whitespace-nowrap">
+                          Priority
+                        </th>
+                        <th className="text-left px-4 py-3 font-semibold text-gray-600 whitespace-nowrap">
+                          Assignee
+                        </th>
+                        <th className="text-left px-4 py-3 font-semibold text-gray-600 whitespace-nowrap">
+                          Reporter
+                        </th>
+                        <th className="text-left px-4 py-3 font-semibold text-gray-600 whitespace-nowrap">
+                          Created
+                        </th>
+                        <th className="text-left px-4 py-3 font-semibold text-gray-600 whitespace-nowrap">
+                          Updated
+                        </th>
+                      </tr>
+                    </thead>
+
+                    <tbody className="divide-y divide-gray-100">
+                      {features.map((feature, index) => {
+                        const jiraId = getFeatureValue(
+                          feature,
+                          "jira_id",
+                          "key",
+                          "id"
+                        );
+                        const summary = getFeatureValue(
+                          feature,
+                          "summary",
+                          "title",
+                          "name"
+                        );
+                        const status = getFeatureStatus(feature);
+                        const priority = getFeaturePriority(feature);
+                        const assignee = getFeatureAssignee(feature);
+                        const reporter = getFeatureReporter(feature);
+                        const created = getFeatureValue(
+                          feature,
+                          "created",
+                          "created_at"
+                        );
+                        const updated = getFeatureValue(
+                          feature,
+                          "updated",
+                          "updated_at"
+                        );
+
+                        return (
+                          <tr
+                            key={`${jiraId}-${index}`}
+                            className="hover:bg-gray-50"
+                          >
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              {jiraId !== "-" ? (
+                                <a
+                                  href={getFeatureUrl(feature)}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center gap-1 font-semibold text-blue-600 hover:text-blue-800"
+                                >
+                                  {jiraId}
+                                  <ExternalLink size={13} />
+                                </a>
+                              ) : (
+                                "-"
+                              )}
+                            </td>
+
+                            <td className="px-4 py-4">
+                              <div
+                                className="max-w-[420px] truncate text-gray-900"
+                                title={String(summary)}
+                              >
+                                {summary}
+                              </div>
+                            </td>
+
+                            <td className="px-4 py-4 whitespace-nowrap">
+                              <span
+                                className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${getStatusClass(
+                                  status
+                                )}`}
+                              >
+                                {status}
+                              </span>
+                            </td>
+
+                            <td className="px-4 py-4 whitespace-nowrap">
+                              <span
+                                className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${getPriorityClass(
+                                  priority
+                                )}`}
+                              >
+                                {priority}
+                              </span>
+                            </td>
+
+                            <td className="px-4 py-4 whitespace-nowrap text-gray-700">
+                              {assignee}
+                            </td>
+
+                            <td className="px-4 py-4 whitespace-nowrap text-gray-700">
+                              {reporter}
+                            </td>
+
+                            <td className="px-4 py-4 whitespace-nowrap text-gray-600">
+                              {created !== "-" ? formatDate(created) : "-"}
+                            </td>
+
+                            <td className="px-4 py-4 whitespace-nowrap text-gray-600">
+                              {updated !== "-" ? formatDate(updated) : "-"}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {featurePages > 1 && (
+                  <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
+                    <p className="text-sm text-gray-500">
+                      Page{" "}
+                      <span className="font-semibold text-gray-900">
+                        {featurePage}
+                      </span>{" "}
+                      of{" "}
+                      <span className="font-semibold text-gray-900">
+                        {featurePages}
+                      </span>
+                    </p>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        disabled={featurePage <= 1 || loadingFeatures}
+                        onClick={() =>
+                          setFeaturePage((page) => Math.max(1, page - 1))
+                        }
+                        className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Previous
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={
+                          featurePage >= featurePages || loadingFeatures
+                        }
+                        onClick={() =>
+                          setFeaturePage((page) =>
+                            Math.min(featurePages, page + 1)
+                          )
+                        }
+                        className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
+      </div>
     </div>
   );
 }
