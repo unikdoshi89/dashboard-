@@ -49,6 +49,11 @@ class JiraConfiguration(Base):
         nullable=False,
     )
 
+    feature_jql: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+    )
+
     uat_label: Mapped[str] = mapped_column(
         String(150),
         nullable=False,
