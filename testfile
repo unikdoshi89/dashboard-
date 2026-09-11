@@ -15,3 +15,5 @@ curl 'http://localhost:8000/api/projects/5/jira/features?page=1&per_page=20&sear
 
 
 {"configured":true,"page":1,"per_page":20,"total":0,"pages":0,"features":[]}
+
+alembic revision --autogenerate -m "add feature jql to jira configuration"
