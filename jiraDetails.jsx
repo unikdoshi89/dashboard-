@@ -147,18 +147,30 @@ setProdLabels(
     try {
       setLoadingFeatures(true);
       setFeatureError("");
+
       const data = await getJiraFeatures(
         projectId,
         featurePage,
         featurePerPage,
         searchValue
       );
+
+      if (!data.configured) {
+        setFeatures([]);
+        setFeatureTotal(0);
+        setFeaturePages(1);
+        return;
+      }
+
       setFeatures(data.features || []);
       setFeatureTotal(data.total || 0);
       setFeaturePages(data.pages || 1);
     } catch (err) {
-      console.error("Unable to load Jira features/stories:", err);
-      setFeatureError(err?.response?.data?.detail || "Unable to fetch Jira features/stories.");
+      console.error("Unable to load Jira features:", err);
+      setFeatureError(
+        err?.response?.data?.detail ||
+        "Unable to fetch Jira features/stories."
+      );
       setFeatures([]);
       setFeatureTotal(0);
       setFeaturePages(1);
@@ -167,9 +179,9 @@ setProdLabels(
     }
   }
 
-  useEffect(() => {
-    loadFeatures();
-  }, [featurePage]);
+useEffect(() => {
+  loadFeatures();
+}, [featurePage]);
 
   async function loadBugs(searchValue = search) {
     try {
@@ -240,12 +252,16 @@ setProdLabels(
       }
 
       if (!jql.trim()) {
-        setConfigError("Bug JQL is required.");
+        setConfigError(
+          "Bug JQL is required."
+        );
         return;
       }
 
       if (!featureJql.trim()) {
-        setConfigError("Feature/Story JQL is required.");
+        setConfigError(
+          "Feature/Story JQL is required."
+        );
         return;
       }
 
@@ -393,7 +409,6 @@ if (prodLabels.length === 0) {
 
     if (configured) {
       await loadBugs(search);
-      await loadFeatures(featureSearch);
     }
   }
 
@@ -720,30 +735,11 @@ if (prodLabels.length === 0) {
               </div>
 
 
-              {/* Feature / Story JQL */}
+              {/* Bug JQL */}
 
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Feature / Story JQL
-                </label>
-                <textarea
-                  value={featureJql}
-                  onChange={(e) => setFeatureJql(e.target.value)}
-                  rows={3}
-                  placeholder='project = ABC AND issuetype in ("Feature", "Story")'
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Complete Jira JQL used to fetch Features and Stories.
-                </p>
-              </div>
-
-              {/* JQL */}
-
-              <div className="md:col-span-2">
-
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Base JQL
+                  Bug JQL
                 </label>
 
                 <textarea
@@ -757,11 +753,31 @@ if (prodLabels.length === 0) {
                 />
 
                 <p className="text-xs text-gray-500 mt-1">
-                  This JQL is used as the base query for Jira issues.
+                  JQL used to fetch Bugs.
                 </p>
-
               </div>
 
+              {/* Feature / Story JQL */}
+
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Feature / Story JQL
+                </label>
+
+                <textarea
+                  value={featureJql}
+                  onChange={(e) =>
+                    setFeatureJql(e.target.value)
+                  }
+                  rows={3}
+                  placeholder='project = ABC AND issuetype in ("Feature", "Story")'
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+
+                <p className="text-xs text-gray-500 mt-1">
+                  Complete JQL used to fetch Features and Stories.
+                </p>
+              </div>
 
               {/* UAT Label */}
 
@@ -1369,7 +1385,17 @@ if (prodLabels.length === 0) {
           </div>
         )}
 
-        {/* Features & Stories */}
+      </div>
+
+    </div>
+  );
+}
+
+
+        {/* ====================================================
+            Features / Stories
+        ===================================================== */}
+
         {configured && (
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm mt-6">
             <div className="px-6 py-5 border-b border-gray-200">
@@ -1377,9 +1403,10 @@ if (prodLabels.length === 0) {
                 <div>
                   <h2 className="text-lg font-semibold text-gray-900">Features & Stories</h2>
                   <p className="text-sm text-gray-500 mt-1">
-                    View Jira Features and Stories using the configured JQL.
+                    View Features and Stories using the configured Feature / Story JQL.
                   </p>
                 </div>
+
                 <form onSubmit={handleFeatureSearch} className="flex items-center gap-2">
                   <div className="relative">
                     <Search size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -1391,13 +1418,17 @@ if (prodLabels.length === 0) {
                       className="w-72 border border-gray-300 rounded-lg pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
-                  <button type="submit" disabled={loadingFeatures} className="px-4 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 disabled:opacity-50">
-                    Search
-                  </button>
+                  <button
+                    type="submit"
+                    disabled={loadingFeatures}
+                    className="px-4 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 disabled:opacity-50"
+                  >Search</button>
                   {featureSearch && (
-                    <button type="button" onClick={handleClearFeatureSearch} className="px-3 py-2.5 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50">
-                      Clear
-                    </button>
+                    <button
+                      type="button"
+                      onClick={handleClearFeatureSearch}
+                      className="px-3 py-2.5 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50"
+                    >Clear</button>
                   )}
                 </form>
               </div>
@@ -1405,29 +1436,37 @@ if (prodLabels.length === 0) {
 
             {featureSearch && (
               <div className="px-6 py-3 bg-gray-50 border-b border-gray-200">
-                <p className="text-sm text-gray-600">Search results for <span className="font-semibold text-gray-900">"{featureSearch}"</span></p>
+                <p className="text-sm text-gray-600">
+                  Feature / Story search results for {""}
+                  <span className="font-semibold text-gray-900">"{featureSearch}"</span>
+                </p>
               </div>
             )}
 
             {featureError && (
               <div className="mx-6 mt-5 flex items-center gap-2 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
-                <XCircle size={18} />{featureError}
+                <XCircle size={18} />
+                {featureError}
               </div>
             )}
 
             {loadingFeatures && (
               <div className="py-12 flex items-center justify-center gap-3 text-gray-500">
-                <RefreshCw size={20} className="animate-spin" /> Loading Features and Stories...
+                <RefreshCw size={20} className="animate-spin" />
+                Loading Features and Stories...
               </div>
             )}
 
             {!loadingFeatures && !featureError && (
               <>
-                <div className="px-6 py-4">
-                  <h3 className="font-semibold text-gray-900">Feature / Story Issues</h3>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Showing <span className="font-semibold">{features.length}</span> of <span className="font-semibold">{featureTotal}</span> issues
-                  </p>
+                <div className="px-6 py-4 flex items-center justify-between">
+                  <div>
+                    <h3 className="font-semibold text-gray-900">Feature / Story Issues</h3>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Showing <span className="font-semibold">{features.length}</span> of {""}
+                      <span className="font-semibold">{featureTotal}</span> issues
+                    </p>
+                  </div>
                 </div>
 
                 {features.length === 0 ? (
@@ -1436,33 +1475,50 @@ if (prodLabels.length === 0) {
                       <Search size={22} className="text-gray-400" />
                     </div>
                     <h3 className="text-sm font-semibold text-gray-900">No Features or Stories found</h3>
-                    <p className="text-sm text-gray-500 mt-1">Check your Feature / Story JQL or try a different search.</p>
+                    <p className="text-sm text-gray-500 mt-1">
+                      Check your Feature / Story JQL or try a different search.
+                    </p>
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead className="bg-gray-50 border-y border-gray-200">
                         <tr>
-                          {['Jira ID','Type','Summary','Status','Priority','Assignee','Story Points','Epic','Created','Updated'].map((heading) => (
-                            <th key={heading} className="text-left px-4 py-3 font-semibold text-gray-600 whitespace-nowrap">{heading}</th>
-                          ))}
+                          <th className="text-left px-6 py-3 font-semibold text-gray-600 whitespace-nowrap">Jira ID</th>
+                          <th className="text-left px-4 py-3 font-semibold text-gray-600 whitespace-nowrap">Type</th>
+                          <th className="text-left px-4 py-3 font-semibold text-gray-600 min-w-[300px]">Summary</th>
+                          <th className="text-left px-4 py-3 font-semibold text-gray-600 whitespace-nowrap">Status</th>
+                          <th className="text-left px-4 py-3 font-semibold text-gray-600 whitespace-nowrap">Priority</th>
+                          <th className="text-left px-4 py-3 font-semibold text-gray-600 whitespace-nowrap">Assignee</th>
+                          <th className="text-left px-4 py-3 font-semibold text-gray-600 whitespace-nowrap">Story Points</th>
+                          <th className="text-left px-4 py-3 font-semibold text-gray-600 whitespace-nowrap">Created</th>
+                          <th className="text-left px-4 py-3 font-semibold text-gray-600 whitespace-nowrap">Updated</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
                         {features.map((issue) => (
                           <tr key={issue.jira_id} className="hover:bg-gray-50">
-                            <td className="px-4 py-4 whitespace-nowrap">
+                            <td className="px-6 py-4 whitespace-nowrap">
                               <a href={getJiraIssueUrl(issue.jira_id)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-semibold text-blue-600 hover:text-blue-800">
                                 {issue.jira_id}<ExternalLink size={13} />
                               </a>
                             </td>
-                            <td className="px-4 py-4 whitespace-nowrap"><span className="inline-flex px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-100 text-purple-700">{issue.issue_type || '-'}</span></td>
-                            <td className="px-4 py-4"><div className="max-w-[420px] truncate text-gray-900" title={issue.summary || ''}>{issue.summary || '-'}</div></td>
-                            <td className="px-4 py-4 whitespace-nowrap"><span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${getStatusClass(issue.status)}`}>{issue.status || '-'}</span></td>
-                            <td className="px-4 py-4 whitespace-nowrap"><span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${getPriorityClass(issue.priority)}`}>{issue.priority || '-'}</span></td>
-                            <td className="px-4 py-4 whitespace-nowrap text-gray-700">{issue.assignee || '-'}</td>
-                            <td className="px-4 py-4 whitespace-nowrap text-gray-700">{issue.story_points ?? '-'}</td>
-                            <td className="px-4 py-4 whitespace-nowrap text-gray-700">{issue.epic || '-'}</td>
+                            <td className="px-4 py-4 whitespace-nowrap">
+                              <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-100 text-purple-700">
+                                {issue.issue_type || issue.type || "-"}
+                              </span>
+                            </td>
+                            <td className="px-4 py-4">
+                              <div className="max-w-[420px] truncate text-gray-900" title={issue.summary || ""}>{issue.summary || "-"}</div>
+                            </td>
+                            <td className="px-4 py-4 whitespace-nowrap">
+                              <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${getStatusClass(issue.status)}`}>{issue.status || "-"}</span>
+                            </td>
+                            <td className="px-4 py-4 whitespace-nowrap">
+                              <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${getPriorityClass(issue.priority)}`}>{issue.priority || "-"}</span>
+                            </td>
+                            <td className="px-4 py-4 whitespace-nowrap text-gray-700">{issue.assignee || "-"}</td>
+                            <td className="px-4 py-4 whitespace-nowrap text-gray-700">{issue.story_points ?? "-"}</td>
                             <td className="px-4 py-4 whitespace-nowrap text-gray-600">{formatDate(issue.created)}</td>
                             <td className="px-4 py-4 whitespace-nowrap text-gray-600">{formatDate(issue.updated)}</td>
                           </tr>
@@ -1474,7 +1530,10 @@ if (prodLabels.length === 0) {
 
                 {featureTotal > 0 && featurePages > 1 && (
                   <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
-                    <p className="text-sm text-gray-500">Page <span className="font-semibold text-gray-900">{featurePage}</span> of <span className="font-semibold text-gray-900">{featurePages}</span></p>
+                    <p className="text-sm text-gray-500">
+                      Page <span className="font-semibold text-gray-900">{featurePage}</span> of {""}
+                      <span className="font-semibold text-gray-900">{featurePages}</span>
+                    </p>
                     <div className="flex items-center gap-2">
                       <button type="button" onClick={() => setFeaturePage((page) => Math.max(1, page - 1))} disabled={featurePage === 1 || loadingFeatures} className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">Previous</button>
                       <button type="button" onClick={() => setFeaturePage((page) => Math.min(featurePages, page + 1))} disabled={featurePage >= featurePages || loadingFeatures} className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">Next</button>
@@ -1485,11 +1544,5 @@ if (prodLabels.length === 0) {
             )}
           </div>
         )}
-
-      </div>
-
-    </div>
-  );
-}
 
 export default JiraDetails;
