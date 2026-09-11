@@ -72,6 +72,9 @@ function JiraDetails() {
   const [featurePerPage] = useState(20);
   const [featureTotal, setFeatureTotal] = useState(0);
   const [featurePages, setFeaturePages] = useState(1);
+  const [featureSearch, setFeatureSearch] = useState("");
+  const [featureSearchInput, setFeatureSearchInput] = useState("");
+  const [featuresError, setFeaturesError] = useState("");
 
 
   // ============================================================
@@ -139,22 +142,41 @@ setProdLabels(
   // Load Jira bugs
   // ============================================================
 
-  async function loadFeatures() {
-  try {
-    setLoadingFeatures(true);
+  async function loadFeatures(searchValue = featureSearch) {
+    try {
+      setLoadingFeatures(true);
+      setFeaturesError("");
 
-    const data = await getJiraFeatures(projectId, featurePage, featurePerPage);
+      const data = await getJiraFeatures(
+        projectId,
+        featurePage,
+        featurePerPage,
+        searchValue
+      );
 
-    setFeatures(data.features || []);
-    setFeatureTotal(data.total || 0);
-    setFeaturePages(data.pages || 1);
+      setFeatures(data.features || []);
+      setFeatureTotal(data.total || 0);
+      setFeaturePages(data.pages || 1);
 
-  } catch (err) {
-    console.error("Unable to load Jira features:", err);
-  } finally {
-    setLoadingFeatures(false);
+    } catch (err) {
+      console.error(
+        "Unable to load Jira features:",
+        err
+      );
+
+      setFeaturesError(
+        err?.response?.data?.detail ||
+        "Unable to fetch Jira features and stories."
+      );
+
+      setFeatures([]);
+      setFeatureTotal(0);
+      setFeaturePages(1);
+
+    } finally {
+      setLoadingFeatures(false);
+    }
   }
-}
 
 useEffect(() => {
   if (configured) {
@@ -356,6 +378,74 @@ if (prodLabels.length === 0) {
   function handleClearSearch() {
     setSearch("");
     loadBugs("");
+  }
+
+  // ============================================================
+  // Feature / Story Search
+  // ============================================================
+
+  async function handleFeatureSearch(event) {
+    event.preventDefault();
+
+    const value = featureSearchInput.trim();
+
+    setFeatureSearch(value);
+    setFeaturePage(1);
+
+    // Search immediately using page 1.
+    await getJiraFeatures(
+      projectId,
+      1,
+      featurePerPage,
+      value
+    ).then((data) => {
+      setFeatures(data.features || []);
+      setFeatureTotal(data.total || 0);
+      setFeaturePages(data.pages || 1);
+      setFeaturesError("");
+    }).catch((err) => {
+      console.error(
+        "Unable to search Jira features:",
+        err
+      );
+
+      setFeaturesError(
+        err?.response?.data?.detail ||
+        "Unable to search Jira features and stories."
+      );
+
+      setFeatures([]);
+      setFeatureTotal(0);
+      setFeaturePages(1);
+    });
+  }
+
+  async function handleClearFeatureSearch() {
+    setFeatureSearchInput("");
+    setFeatureSearch("");
+    setFeaturePage(1);
+
+    await getJiraFeatures(
+      projectId,
+      1,
+      featurePerPage,
+      ""
+    ).then((data) => {
+      setFeatures(data.features || []);
+      setFeatureTotal(data.total || 0);
+      setFeaturePages(data.pages || 1);
+      setFeaturesError("");
+    }).catch((err) => {
+      console.error(
+        "Unable to clear Jira feature search:",
+        err
+      );
+
+      setFeaturesError(
+        err?.response?.data?.detail ||
+        "Unable to load Jira features and stories."
+      );
+    });
   }
 
   // ============================================================
@@ -1348,15 +1438,82 @@ if (prodLabels.length === 0) {
                   </p>
                 </div>
 
-                <div className="text-sm text-gray-500">
-                  Total{" "}
-                  <span className="font-semibold text-gray-900">
-                    {featureTotal}
-                  </span>
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+
+                  <div className="text-sm text-gray-500">
+                    Total{" "}
+                    <span className="font-semibold text-gray-900">
+                      {featureTotal}
+                    </span>
+                  </div>
+
+                  <form
+                    onSubmit={handleFeatureSearch}
+                    className="flex items-center gap-2"
+                  >
+
+                    <div className="relative">
+
+                      <Search
+                        size={17}
+                        className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                      />
+
+                      <input
+                        type="text"
+                        value={featureSearchInput}
+                        onChange={(e) =>
+                          setFeatureSearchInput(e.target.value)
+                        }
+                        placeholder="Search Feature or Story"
+                        className="w-72 border border-gray-300 rounded-lg pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={loadingFeatures}
+                      className="px-4 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      Search
+                    </button>
+
+                    {featureSearch && (
+                      <button
+                        type="button"
+                        onClick={handleClearFeatureSearch}
+                        disabled={loadingFeatures}
+                        className="px-3 py-2.5 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+                      >
+                        Clear
+                      </button>
+                    )}
+
+                  </form>
+
                 </div>
 
               </div>
             </div>
+
+            {featureSearch && (
+              <div className="px-6 py-3 bg-gray-50 border-b border-gray-200">
+                <p className="text-sm text-gray-600">
+                  Feature/Story search results for{" "}
+                  <span className="font-semibold text-gray-900">
+                    "{featureSearch}"
+                  </span>
+                </p>
+              </div>
+            )}
+
+            {featuresError && (
+              <div className="mx-6 mt-5 flex items-center gap-2 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+                <XCircle size={18} />
+                {featuresError}
+              </div>
+            )}
 
             {/* Loading */}
             {loadingFeatures && (
@@ -1407,8 +1564,12 @@ if (prodLabels.length === 0) {
                             Jira ID
                           </th>
 
+                          <th className="text-left px-4 py-3 font-semibold text-gray-600 whitespace-nowrap">
+                            Type
+                          </th>
+
                           <th className="text-left px-4 py-3 font-semibold text-gray-600 min-w-[320px]">
-                            Feature
+                            Feature / Story
                           </th>
 
                           <th className="text-left px-4 py-3 font-semibold text-gray-600 whitespace-nowrap">
@@ -1475,7 +1636,27 @@ if (prodLabels.length === 0) {
 
                             </td>
 
-                            {/* Feature */}
+                            {/* Type */}
+
+                            <td className="px-4 py-4 whitespace-nowrap">
+                              <span
+                                className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${
+                                  String(
+                                    feature.issue_type ||
+                                    feature.type ||
+                                    ""
+                                  ).toLowerCase() === "feature"
+                                    ? "bg-purple-100 text-purple-700"
+                                    : "bg-blue-100 text-blue-700"
+                                }`}
+                              >
+                                {feature.issue_type ||
+                                  feature.type ||
+                                  "Story"}
+                              </span>
+                            </td>
+
+                            {/* Feature / Story */}
 
                             <td className="px-4 py-4">
 
