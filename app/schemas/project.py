@@ -79,6 +79,7 @@ class JiraConfigurationResponse(BaseModel):
     jira_url: str
     jira_email: str
     jql: str
+    feature_jql: str
     uat_label: str
     prod_label: str
     active: bool
