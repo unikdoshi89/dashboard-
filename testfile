@@ -1,0 +1,20 @@
+fetch("http://localhost:8000/api/projects/5/jira/features?page=1&per_page=20&search=", {
+  "headers": {
+    "accept": "application/json, text/plain, */*",
+    "accept-language": "en-GB,en-US;q=0.9,en;q=0.8",
+    "sec-ch-ua": "\"Not)A;Brand\";v=\"8\", \"Chromium\";v=\"138\", \"Google Chrome\";v=\"138\"",
+    "sec-ch-ua-mobile": "?1",
+    "sec-ch-ua-platform": "\"Android\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-site"
+  },
+  "referrer": "http://localhost:3001/",
+  "body": null,
+  "method": "GET",
+  "mode": "cors",
+  "credentials": "omit"
+});
+
+
+{"configured":true,"page":1,"per_page":20,"total":0,"pages":0,"features":[]}
