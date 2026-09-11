@@ -33,6 +33,7 @@ function JiraDetails() {
   const [jiraEmail, setJiraEmail] = useState("");
   const [jiraApiToken, setJiraApiToken] = useState("");
   const [jql, setJql] = useState("");
+  const [featureJql, setFeatureJql] = useState("");
 
   const [uatLabels, setUatLabels] = useState([]);
   const [prodLabels, setProdLabels] = useState([]);
@@ -73,8 +74,7 @@ function JiraDetails() {
   const [featureTotal, setFeatureTotal] = useState(0);
   const [featurePages, setFeaturePages] = useState(1);
   const [featureSearch, setFeatureSearch] = useState("");
-  const [featureSearchInput, setFeatureSearchInput] = useState("");
-  const [featuresError, setFeaturesError] = useState("");
+  const [featureError, setFeatureError] = useState("");
 
 
   // ============================================================
@@ -98,6 +98,7 @@ function JiraDetails() {
       setJiraUrl(data.jira_url || "");
       setJiraEmail(data.jira_email || "");
       setJql(data.jql || "");
+      setFeatureJql(data.feature_jql || "");
 
       setUatLabels(
   (data.uat_label || "")
@@ -145,44 +146,30 @@ setProdLabels(
   async function loadFeatures(searchValue = featureSearch) {
     try {
       setLoadingFeatures(true);
-      setFeaturesError("");
-
+      setFeatureError("");
       const data = await getJiraFeatures(
         projectId,
         featurePage,
         featurePerPage,
         searchValue
       );
-
       setFeatures(data.features || []);
       setFeatureTotal(data.total || 0);
       setFeaturePages(data.pages || 1);
-
     } catch (err) {
-      console.error(
-        "Unable to load Jira features:",
-        err
-      );
-
-      setFeaturesError(
-        err?.response?.data?.detail ||
-        "Unable to fetch Jira features and stories."
-      );
-
+      console.error("Unable to load Jira features/stories:", err);
+      setFeatureError(err?.response?.data?.detail || "Unable to fetch Jira features/stories.");
       setFeatures([]);
       setFeatureTotal(0);
       setFeaturePages(1);
-
     } finally {
       setLoadingFeatures(false);
     }
   }
 
-useEffect(() => {
-  if (configured) {
+  useEffect(() => {
     loadFeatures();
-  }
-}, [configured, featurePage]);
+  }, [featurePage]);
 
   async function loadBugs(searchValue = search) {
     try {
@@ -253,9 +240,12 @@ useEffect(() => {
       }
 
       if (!jql.trim()) {
-        setConfigError(
-          "JQL is required."
-        );
+        setConfigError("Bug JQL is required.");
+        return;
+      }
+
+      if (!featureJql.trim()) {
+        setConfigError("Feature/Story JQL is required.");
         return;
       }
 
@@ -285,6 +275,7 @@ if (prodLabels.length === 0) {
         jira_api_token:
           jiraApiToken.trim(),
         jql: jql.trim(),
+        feature_jql: featureJql.trim(),
         uat_label: uatLabels.join(","),
         prod_label: prodLabels.join(","),
         active,
@@ -310,8 +301,9 @@ if (prodLabels.length === 0) {
 
       // Load Jira issues after saving
       await loadBugs("");
+      setFeatureSearch("");
       setFeaturePage(1);
-      await loadFeatures();
+      await loadFeatures("");
 
     } catch (err) {
       console.error(
@@ -380,72 +372,16 @@ if (prodLabels.length === 0) {
     loadBugs("");
   }
 
-  // ============================================================
-  // Feature / Story Search
-  // ============================================================
-
   async function handleFeatureSearch(event) {
     event.preventDefault();
-
-    const value = featureSearchInput.trim();
-
-    setFeatureSearch(value);
     setFeaturePage(1);
-
-    // Search immediately using page 1.
-    await getJiraFeatures(
-      projectId,
-      1,
-      featurePerPage,
-      value
-    ).then((data) => {
-      setFeatures(data.features || []);
-      setFeatureTotal(data.total || 0);
-      setFeaturePages(data.pages || 1);
-      setFeaturesError("");
-    }).catch((err) => {
-      console.error(
-        "Unable to search Jira features:",
-        err
-      );
-
-      setFeaturesError(
-        err?.response?.data?.detail ||
-        "Unable to search Jira features and stories."
-      );
-
-      setFeatures([]);
-      setFeatureTotal(0);
-      setFeaturePages(1);
-    });
+    await loadFeatures(featureSearch);
   }
 
   async function handleClearFeatureSearch() {
-    setFeatureSearchInput("");
     setFeatureSearch("");
     setFeaturePage(1);
-
-    await getJiraFeatures(
-      projectId,
-      1,
-      featurePerPage,
-      ""
-    ).then((data) => {
-      setFeatures(data.features || []);
-      setFeatureTotal(data.total || 0);
-      setFeaturePages(data.pages || 1);
-      setFeaturesError("");
-    }).catch((err) => {
-      console.error(
-        "Unable to clear Jira feature search:",
-        err
-      );
-
-      setFeaturesError(
-        err?.response?.data?.detail ||
-        "Unable to load Jira features and stories."
-      );
-    });
+    await loadFeatures("");
   }
 
   // ============================================================
@@ -457,8 +393,7 @@ if (prodLabels.length === 0) {
 
     if (configured) {
       await loadBugs(search);
-      setFeaturePage(1);
-      await loadFeatures();
+      await loadFeatures(featureSearch);
     }
   }
 
@@ -784,6 +719,24 @@ if (prodLabels.length === 0) {
 
               </div>
 
+
+              {/* Feature / Story JQL */}
+
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Feature / Story JQL
+                </label>
+                <textarea
+                  value={featureJql}
+                  onChange={(e) => setFeatureJql(e.target.value)}
+                  rows={3}
+                  placeholder='project = ABC AND issuetype in ("Feature", "Story")'
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Complete Jira JQL used to fetch Features and Stories.
+                </p>
+              </div>
 
               {/* JQL */}
 
@@ -1416,422 +1369,120 @@ if (prodLabels.length === 0) {
           </div>
         )}
 
-
-        {/* ====================================================
-            Jira Features
-        ===================================================== */}
-
+        {/* Features & Stories */}
         {configured && (
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm mt-6">
-
-            {/* Features header */}
             <div className="px-6 py-5 border-b border-gray-200">
               <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-
                 <div>
-                  <h2 className="text-lg font-semibold text-gray-900">
-                    Jira Features
-                  </h2>
-
+                  <h2 className="text-lg font-semibold text-gray-900">Features & Stories</h2>
                   <p className="text-sm text-gray-500 mt-1">
-                    View Jira features from the configured project.
+                    View Jira Features and Stories using the configured JQL.
                   </p>
                 </div>
-
-                <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-
-                  <div className="text-sm text-gray-500">
-                    Total{" "}
-                    <span className="font-semibold text-gray-900">
-                      {featureTotal}
-                    </span>
+                <form onSubmit={handleFeatureSearch} className="flex items-center gap-2">
+                  <div className="relative">
+                    <Search size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      value={featureSearch}
+                      onChange={(e) => setFeatureSearch(e.target.value)}
+                      placeholder="Search Feature / Story"
+                      className="w-72 border border-gray-300 rounded-lg pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
                   </div>
-
-                  <form
-                    onSubmit={handleFeatureSearch}
-                    className="flex items-center gap-2"
-                  >
-
-                    <div className="relative">
-
-                      <Search
-                        size={17}
-                        className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-                      />
-
-                      <input
-                        type="text"
-                        value={featureSearchInput}
-                        onChange={(e) =>
-                          setFeatureSearchInput(e.target.value)
-                        }
-                        placeholder="Search Feature or Story"
-                        className="w-72 border border-gray-300 rounded-lg pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-
-                    </div>
-
-                    <button
-                      type="submit"
-                      disabled={loadingFeatures}
-                      className="px-4 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 disabled:opacity-50"
-                    >
-                      Search
+                  <button type="submit" disabled={loadingFeatures} className="px-4 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 disabled:opacity-50">
+                    Search
+                  </button>
+                  {featureSearch && (
+                    <button type="button" onClick={handleClearFeatureSearch} className="px-3 py-2.5 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50">
+                      Clear
                     </button>
-
-                    {featureSearch && (
-                      <button
-                        type="button"
-                        onClick={handleClearFeatureSearch}
-                        disabled={loadingFeatures}
-                        className="px-3 py-2.5 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50"
-                      >
-                        Clear
-                      </button>
-                    )}
-
-                  </form>
-
-                </div>
-
+                  )}
+                </form>
               </div>
             </div>
 
             {featureSearch && (
               <div className="px-6 py-3 bg-gray-50 border-b border-gray-200">
-                <p className="text-sm text-gray-600">
-                  Feature/Story search results for{" "}
-                  <span className="font-semibold text-gray-900">
-                    "{featureSearch}"
-                  </span>
-                </p>
+                <p className="text-sm text-gray-600">Search results for <span className="font-semibold text-gray-900">"{featureSearch}"</span></p>
               </div>
             )}
 
-            {featuresError && (
+            {featureError && (
               <div className="mx-6 mt-5 flex items-center gap-2 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
-                <XCircle size={18} />
-                {featuresError}
+                <XCircle size={18} />{featureError}
               </div>
             )}
 
-            {/* Loading */}
             {loadingFeatures && (
               <div className="py-12 flex items-center justify-center gap-3 text-gray-500">
-                <RefreshCw
-                  size={20}
-                  className="animate-spin"
-                />
-                Loading Jira features...
+                <RefreshCw size={20} className="animate-spin" /> Loading Features and Stories...
               </div>
             )}
 
-            {/* Content */}
-            {!loadingFeatures && (
+            {!loadingFeatures && !featureError && (
               <>
-                {/* Empty state */}
+                <div className="px-6 py-4">
+                  <h3 className="font-semibold text-gray-900">Feature / Story Issues</h3>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Showing <span className="font-semibold">{features.length}</span> of <span className="font-semibold">{featureTotal}</span> issues
+                  </p>
+                </div>
+
                 {features.length === 0 ? (
                   <div className="px-6 py-14 text-center">
-
                     <div className="mx-auto w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-4">
-                      <Search
-                        size={22}
-                        className="text-gray-400"
-                      />
+                      <Search size={22} className="text-gray-400" />
                     </div>
-
-                    <h3 className="text-sm font-semibold text-gray-900">
-                      No features found
-                    </h3>
-
-                    <p className="text-sm text-gray-500 mt-1">
-                      There are no Jira features available for this project.
-                    </p>
-
+                    <h3 className="text-sm font-semibold text-gray-900">No Features or Stories found</h3>
+                    <p className="text-sm text-gray-500 mt-1">Check your Feature / Story JQL or try a different search.</p>
                   </div>
                 ) : (
-
-                  /* Feature table */
                   <div className="overflow-x-auto">
-
                     <table className="w-full text-sm">
-
                       <thead className="bg-gray-50 border-y border-gray-200">
-
                         <tr>
-
-                          <th className="text-left px-6 py-3 font-semibold text-gray-600 whitespace-nowrap">
-                            Jira ID
-                          </th>
-
-                          <th className="text-left px-4 py-3 font-semibold text-gray-600 whitespace-nowrap">
-                            Type
-                          </th>
-
-                          <th className="text-left px-4 py-3 font-semibold text-gray-600 min-w-[320px]">
-                            Feature / Story
-                          </th>
-
-                          <th className="text-left px-4 py-3 font-semibold text-gray-600 whitespace-nowrap">
-                            Status
-                          </th>
-
-                          <th className="text-left px-4 py-3 font-semibold text-gray-600 whitespace-nowrap">
-                            Priority
-                          </th>
-
-                          <th className="text-left px-4 py-3 font-semibold text-gray-600 whitespace-nowrap">
-                            Assignee
-                          </th>
-
-                          <th className="text-left px-4 py-3 font-semibold text-gray-600 whitespace-nowrap">
-                            Story Points
-                          </th>
-
-                          <th className="text-left px-4 py-3 font-semibold text-gray-600 whitespace-nowrap">
-                            Epic
-                          </th>
-
-                          <th className="text-left px-4 py-3 font-semibold text-gray-600 whitespace-nowrap">
-                            Labels
-                          </th>
-
-                          <th className="text-left px-4 py-3 font-semibold text-gray-600 whitespace-nowrap">
-                            Created
-                          </th>
-
-                          <th className="text-left px-4 py-3 font-semibold text-gray-600 whitespace-nowrap">
-                            Updated
-                          </th>
-
+                          {['Jira ID','Type','Summary','Status','Priority','Assignee','Story Points','Epic','Created','Updated'].map((heading) => (
+                            <th key={heading} className="text-left px-4 py-3 font-semibold text-gray-600 whitespace-nowrap">{heading}</th>
+                          ))}
                         </tr>
-
                       </thead>
-
                       <tbody className="divide-y divide-gray-100">
-
-                        {features.map((feature) => (
-
-                          <tr
-                            key={feature.jira_id}
-                            className="hover:bg-gray-50"
-                          >
-
-                            {/* Jira ID */}
-
-                            <td className="px-6 py-4 whitespace-nowrap">
-
-                              <a
-                                href={getJiraIssueUrl(feature.jira_id)}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="inline-flex items-center gap-1 font-semibold text-blue-600 hover:text-blue-800"
-                              >
-
-                                {feature.jira_id || "-"}
-
-                                <ExternalLink size={13} />
-
+                        {features.map((issue) => (
+                          <tr key={issue.jira_id} className="hover:bg-gray-50">
+                            <td className="px-4 py-4 whitespace-nowrap">
+                              <a href={getJiraIssueUrl(issue.jira_id)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-semibold text-blue-600 hover:text-blue-800">
+                                {issue.jira_id}<ExternalLink size={13} />
                               </a>
-
                             </td>
-
-                            {/* Type */}
-
-                            <td className="px-4 py-4 whitespace-nowrap">
-                              <span
-                                className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${
-                                  String(
-                                    feature.issue_type ||
-                                    feature.type ||
-                                    ""
-                                  ).toLowerCase() === "feature"
-                                    ? "bg-purple-100 text-purple-700"
-                                    : "bg-blue-100 text-blue-700"
-                                }`}
-                              >
-                                {feature.issue_type ||
-                                  feature.type ||
-                                  "Story"}
-                              </span>
-                            </td>
-
-                            {/* Feature / Story */}
-
-                            <td className="px-4 py-4">
-
-                              <div
-                                className="max-w-[420px] truncate text-gray-900"
-                                title={feature.summary || ""}
-                              >
-                                {feature.summary || "-"}
-                              </div>
-
-                            </td>
-
-                            {/* Status */}
-
-                            <td className="px-4 py-4 whitespace-nowrap">
-
-                              <span
-                                className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${getStatusClass(
-                                  feature.status
-                                )}`}
-                              >
-                                {feature.status || "-"}
-                              </span>
-
-                            </td>
-
-                            {/* Priority */}
-
-                            <td className="px-4 py-4 whitespace-nowrap">
-
-                              <span
-                                className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${getPriorityClass(
-                                  feature.priority
-                                )}`}
-                              >
-                                {feature.priority || "-"}
-                              </span>
-
-                            </td>
-
-                            {/* Assignee */}
-
-                            <td className="px-4 py-4 whitespace-nowrap text-gray-700">
-                              {feature.assignee || "Unassigned"}
-                            </td>
-
-                            {/* Story points */}
-
-                            <td className="px-4 py-4 whitespace-nowrap text-gray-700">
-                              {feature.story_points ?? "-"}
-                            </td>
-
-                            {/* Epic */}
-
-                            <td className="px-4 py-4 whitespace-nowrap text-gray-700">
-                              {feature.epic || "-"}
-                            </td>
-
-                            {/* Labels */}
-
-                            <td className="px-4 py-4">
-
-                              {feature.labels?.length ? (
-
-                                <div className="flex flex-wrap gap-1 max-w-[240px]">
-
-                                  {feature.labels.map((label, index) => (
-
-                                    <span
-                                      key={`${feature.jira_id}-${label}-${index}`}
-                                      className="inline-flex px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600"
-                                    >
-                                      {label}
-                                    </span>
-
-                                  ))}
-
-                                </div>
-
-                              ) : (
-                                <span className="text-gray-500">
-                                  -
-                                </span>
-                              )}
-
-                            </td>
-
-                            {/* Created */}
-
-                            <td className="px-4 py-4 whitespace-nowrap text-gray-600">
-                              {formatDate(feature.created)}
-                            </td>
-
-                            {/* Updated */}
-
-                            <td className="px-4 py-4 whitespace-nowrap text-gray-600">
-                              {formatDate(feature.updated)}
-                            </td>
-
+                            <td className="px-4 py-4 whitespace-nowrap"><span className="inline-flex px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-100 text-purple-700">{issue.issue_type || '-'}</span></td>
+                            <td className="px-4 py-4"><div className="max-w-[420px] truncate text-gray-900" title={issue.summary || ''}>{issue.summary || '-'}</div></td>
+                            <td className="px-4 py-4 whitespace-nowrap"><span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${getStatusClass(issue.status)}`}>{issue.status || '-'}</span></td>
+                            <td className="px-4 py-4 whitespace-nowrap"><span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${getPriorityClass(issue.priority)}`}>{issue.priority || '-'}</span></td>
+                            <td className="px-4 py-4 whitespace-nowrap text-gray-700">{issue.assignee || '-'}</td>
+                            <td className="px-4 py-4 whitespace-nowrap text-gray-700">{issue.story_points ?? '-'}</td>
+                            <td className="px-4 py-4 whitespace-nowrap text-gray-700">{issue.epic || '-'}</td>
+                            <td className="px-4 py-4 whitespace-nowrap text-gray-600">{formatDate(issue.created)}</td>
+                            <td className="px-4 py-4 whitespace-nowrap text-gray-600">{formatDate(issue.updated)}</td>
                           </tr>
-
                         ))}
-
                       </tbody>
-
                     </table>
-
                   </div>
                 )}
 
-                {/* Pagination */}
-
-                {features.length > 0 && featurePages > 1 && (
-
-                  <div className="px-6 py-4 border-t border-gray-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-
-                    <p className="text-sm text-gray-500">
-
-                      Showing page{" "}
-
-                      <span className="font-semibold text-gray-900">
-                        {featurePage}
-                      </span>{" "}
-
-                      of{" "}
-
-                      <span className="font-semibold text-gray-900">
-                        {featurePages}
-                      </span>
-
-                    </p>
-
+                {featureTotal > 0 && featurePages > 1 && (
+                  <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
+                    <p className="text-sm text-gray-500">Page <span className="font-semibold text-gray-900">{featurePage}</span> of <span className="font-semibold text-gray-900">{featurePages}</span></p>
                     <div className="flex items-center gap-2">
-
-                      <button
-                        type="button"
-                        disabled={
-                          featurePage <= 1 ||
-                          loadingFeatures
-                        }
-                        onClick={() =>
-                          setFeaturePage((page) =>
-                            Math.max(1, page - 1)
-                          )
-                        }
-                        className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        Previous
-                      </button>
-
-                      <button
-                        type="button"
-                        disabled={
-                          featurePage >= featurePages ||
-                          loadingFeatures
-                        }
-                        onClick={() =>
-                          setFeaturePage((page) =>
-                            Math.min(featurePages, page + 1)
-                          )
-                        }
-                        className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        Next
-                      </button>
-
+                      <button type="button" onClick={() => setFeaturePage((page) => Math.max(1, page - 1))} disabled={featurePage === 1 || loadingFeatures} className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">Previous</button>
+                      <button type="button" onClick={() => setFeaturePage((page) => Math.min(featurePages, page + 1))} disabled={featurePage >= featurePages || loadingFeatures} className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">Next</button>
                     </div>
-
                   </div>
-
                 )}
-
               </>
             )}
-
           </div>
         )}
 
