@@ -1,19 +1,10 @@
-curl 'http://localhost:8000/api/projects/5/jira/features?page=1&per_page=20&search=' \
-  -H 'Accept: application/json, text/plain, */*' \
-  -H 'Accept-Language: en-GB,en-US;q=0.9,en;q=0.8' \
-  -H 'Connection: keep-alive' \
-  -H 'DNT: 1' \
-  -H 'Origin: http://localhost:3001' \
-  -H 'Referer: http://localhost:3001/' \
-  -H 'Sec-Fetch-Dest: empty' \
-  -H 'Sec-Fetch-Mode: cors' \
-  -H 'Sec-Fetch-Site: same-site' \
-  -H 'User-Agent: Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Mobile Safari/537.36' \
-  -H 'sec-ch-ua: "Not)A;Brand";v="8", "Chromium";v="138", "Google Chrome";v="138"' \
-  -H 'sec-ch-ua-mobile: ?1' \
-  -H 'sec-ch-ua-platform: "Android"'
+sqlalchemy.exc.ProgrammingError: (psycopg2.errors.UndefinedColumn) column jira_configurations.feature_jql does not exist
+LINE 1: ...ra_configurations.jql AS jira_configurations_jql, jira_confi...
+                                                             ^
 
-
-{"configured":true,"page":1,"per_page":20,"total":0,"pages":0,"features":[]}
-
-alembic revision --autogenerate -m "add feature jql to jira configuration"
+[SQL: SELECT jira_configurations.id AS jira_configurations_id, jira_configurations.project_id AS jira_configurations_project_id, jira_configurations.jira_url AS jira_configurations_jira_url, jira_configurations.jira_email AS jira_configurations_jira_email, jira_configurations.jira_api_token AS jira_configurations_jira_api_token, jira_configurations.jql AS jira_configurations_jql, jira_configurations.feature_jql AS jira_configurations_feature_jql, jira_configurations.uat_label AS jira_configurations_uat_label, jira_configurations.prod_label AS jira_configurations_prod_label, jira_configurations.active AS jira_configurations_active, jira_configurations.created_at AS jira_configurations_created_at, jira_configurations.updated_at AS jira_configurations_updated_at 
+FROM jira_configurations 
+WHERE jira_configurations.project_id = %(project_id_1)s 
+ LIMIT %(param_1)s]
+[parameters: {'project_id_1': 5, 'param_1': 1}]
+(Background on this error at: https://sqlalche.me/e/20/f405)
