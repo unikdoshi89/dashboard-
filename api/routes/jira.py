@@ -828,23 +828,99 @@ async def get_jira_features(
     project_id: int,
     page: int = Query(default=1, ge=1),
     per_page: int = Query(default=20, ge=5, le=200),
+    search: str = Query(default=""),
     db: Session = Depends(get_db),
 ):
-    project = db.query(Project).filter(Project.id == project_id).first()
-    if not project:
-        raise HTTPException(404, "Project not found")
+    # ---------------------------------------------------------
+    # Validate project
+    # ---------------------------------------------------------
 
-    config = db.query(JiraConfiguration).filter(
-        JiraConfiguration.project_id == project_id,
-        JiraConfiguration.active.is_(True),
-    ).first()
+    project = (
+        db.query(Project)
+        .filter(Project.id == project_id)
+        .first()
+    )
+
+    if not project:
+        raise HTTPException(
+            status_code=404,
+            detail="Project not found",
+        )
+
+    # ---------------------------------------------------------
+    # Get Jira configuration
+    # ---------------------------------------------------------
+
+    config = (
+        db.query(JiraConfiguration)
+        .filter(
+            JiraConfiguration.project_id == project_id,
+            JiraConfiguration.active.is_(True),
+        )
+        .first()
+    )
 
     if not config:
-        return {"configured": False, "features": []}
+        return {
+            "configured": False,
+            "page": page,
+            "per_page": per_page,
+            "total": 0,
+            "pages": 0,
+            "features": [],
+        }
 
-    # Auto-generate feature JQL
-    base_jql = config.jql.split("AND")[0].strip()
-    feature_jql = f"{base_jql} AND issuetype in (Story, Task, Epic)"
+    # ---------------------------------------------------------
+    # Use Feature / Story JQL configured by the user
+    # ---------------------------------------------------------
+
+    feature_jql = (
+        config.feature_jql or ""
+    ).strip()
+
+    if not feature_jql:
+        raise HTTPException(
+            status_code=400,
+            detail="Feature/Story JQL is not configured",
+        )
+
+    # ---------------------------------------------------------
+    # Add UI search to Feature / Story JQL
+    # ---------------------------------------------------------
+
+    search = search.strip()
+
+    if search:
+        # Search Jira issue key or summary.
+        #
+        # Example:
+        #
+        # User JQL:
+        # project = ABC AND issuetype in ("Feature", "Story")
+        #
+        # Search:
+        # payment
+        #
+        # Resulting JQL:
+        #
+        # (project = ABC AND issuetype in ("Feature", "Story"))
+        # AND (summary ~ "payment" OR key = "payment")
+        #
+        escaped_search = (
+            search
+            .replace("\\", "\\\\")
+            .replace('"', '\\"')
+        )
+
+        feature_jql = (
+            f'({feature_jql}) '
+            f'AND (summary ~ "{escaped_search}" '
+            f'OR key = "{escaped_search}")'
+        )
+
+    # ---------------------------------------------------------
+    # Fetch issues from Jira
+    # ---------------------------------------------------------
 
     try:
         jira_data = await search_jira_features(
@@ -853,36 +929,116 @@ async def get_jira_features(
             jira_api_token=config.jira_api_token,
             jql=feature_jql,
         )
-    except Exception as exc:
-        raise HTTPException(502, f"Unable to fetch Jira features: {str(exc)}")
 
-    features_raw = jira_data["issues"]
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Unable to fetch Jira features: {str(exc)}",
+        )
+
+    # ---------------------------------------------------------
+    # Jira issues
+    # ---------------------------------------------------------
+
+    features_raw = jira_data.get(
+        "issues",
+        [],
+    )
+
     total = len(features_raw)
+
+    # ---------------------------------------------------------
+    # Pagination
+    # ---------------------------------------------------------
 
     start = (page - 1) * per_page
     end = start + per_page
 
+    page_issues = features_raw[start:end]
+
+    # ---------------------------------------------------------
+    # Convert Jira response
+    # ---------------------------------------------------------
+
     features = []
-    for issue in features_raw[start:end]:
-        fields = issue.get("fields", {})
+
+    for issue in page_issues:
+
+        fields = issue.get(
+            "fields",
+            {},
+        )
+
+        status = fields.get("status") or {}
+        priority = fields.get("priority") or {}
+        assignee = fields.get("assignee") or {}
+        parent = fields.get("parent") or {}
+
         features.append({
             "jira_id": issue.get("key"),
-            "summary": fields.get("summary"),
-            "status": fields.get("status", {}).get("name"),
-            "priority": fields.get("priority", {}).get("name"),
-            "assignee": fields.get("assignee", {}).get("displayName"),
-            "story_points": fields.get("customfield_10008"),
-            "epic": fields.get("parent", {}).get("key"),
-            "created": fields.get("created"),
-            "updated": fields.get("updated"),
-            "labels": fields.get("labels") or [],
+
+            "summary": fields.get(
+                "summary"
+            ),
+
+            "status": status.get(
+                "name"
+            ),
+
+            "priority": priority.get(
+                "name"
+            ),
+
+            "assignee": assignee.get(
+                "displayName"
+            ),
+
+            "story_points": fields.get(
+                "customfield_10008"
+            ),
+
+            "epic": parent.get(
+                "key"
+            ),
+
+            "created": fields.get(
+                "created"
+            ),
+
+            "updated": fields.get(
+                "updated"
+            ),
+
+            "labels": fields.get(
+                "labels"
+            ) or [],
+
+            # Return issue type as well
+            # so UI can display Feature / Story.
+            "issue_type": (
+                fields.get("issuetype") or {}
+            ).get("name"),
         })
+
+    # ---------------------------------------------------------
+    # Calculate pages
+    # ---------------------------------------------------------
+
+    pages = (
+        total // per_page
+        + (1 if total % per_page else 0)
+    )
+
+    # ---------------------------------------------------------
+    # Response
+    # ---------------------------------------------------------
 
     return {
         "configured": True,
         "page": page,
         "per_page": per_page,
         "total": total,
-        "pages": (total // per_page) + (1 if total % per_page else 0),
+        "pages": pages,
         "features": features,
     }
+
