@@ -98,3 +98,45 @@ sqlalchemy.exc.IntegrityError: (psycopg2.errors.NotNullViolation) column "featur
 [SQL: ALTER TABLE jira_configurations ADD COLUMN feature_jql TEXT NOT NULL]
 (Background on this error at: https://sqlalche.me/e/20/gkpj)
 (venv) 22H-LTP-H-61376:dashboard-backend u2515$ 
+
+
+
+
+
+
+
+def upgrade():
+    # Add the new column temporarily as nullable
+    op.add_column(
+        'jira_configurations',
+        sa.Column(
+            'feature_jql',
+            sa.Text(),
+            nullable=True,
+        )
+    )
+
+    # Give existing Jira configurations a default Feature/Story JQL.
+    # We use the existing JQL as the initial value so existing
+    # configurations remain valid.
+    op.execute("""
+        UPDATE jira_configurations
+        SET feature_jql = jql
+        WHERE feature_jql IS NULL
+    """)
+
+    # Now that every existing row has a value, make the column NOT NULL
+    op.alter_column(
+        'jira_configurations',
+        'feature_jql',
+        existing_type=sa.Text(),
+        nullable=False,
+    )
+
+
+
+def downgrade():
+    op.drop_column(
+        'jira_configurations',
+        'feature_jql',
+    )
