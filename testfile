@@ -15,3 +15,62 @@ SELECT
     critical_threshold
 FROM metric_definitions
 ORDER BY category_id, id;
+
+
+
+qe_governance=# SELECT id, name, weight, display_order
+qe_governance-# FROM metric_categories
+qe_governance-# ORDER BY display_order;
+ id |              name               | weight | display_order 
+----+---------------------------------+--------+---------------
+ 10 | Coverage Indicators             |  15.00 |             1
+  7 | Test Design & Coverage          |  15.00 |             1
+ 11 | Detection Capability            |  15.00 |             2
+  8 | Automation Coverage & Stability |  15.00 |             2
+  9 | Production Quality              |  15.00 |             3
+ 12 | Effectiveness                   |  15.00 |             3
+ 13 | Continuous Improvement          |  10.00 |             4
+(7 rows)
+
+qe_governance=# 
+qe_governance=# SELECT
+qe_governance-#     id,
+qe_governance-#     name,
+qe_governance-#     metric_key,
+qe_governance-#     category_id,
+qe_governance-#     weight,
+qe_governance-#     direction,
+qe_governance-#     default_target,
+qe_governance-#     warning_threshold,
+qe_governance-#     critical_threshold
+qe_governance-# FROM metric_definitions
+qe_governance-# ORDER BY category_id, id;
+ id |               name                |            metric_key             | category_id | weight |    direction     | default_target | warning_threshold | critical_threshold 
+----+-----------------------------------+-----------------------------------+-------------+--------+------------------+----------------+-------------------+--------------------
+ 11 | RTM Completeness                  | rtm_completeness                  |           7 |   0.00 | higher_is_better |             90 |                85 |                 80
+ 12 | Negative Test Ratio               | negative_test_ratio               |           7 |   0.00 | higher_is_better |             20 |                15 |                 10
+ 13 | Integration Test %                | integration_test_percentage       |           7 |   0.00 | higher_is_better |             30 |                25 |                 20      
+ 14 | Risk Coverage                     | risk_coverage                     |           7 |   0.00 | higher_is_better |             90 |                80 |                 70      
+ 15 | Late Test Creation Count          | late_test_creation                |           7 |   0.00 | lower_is_better  |              5 |                10 |                 15      
+ 16 | QE Participation Rate             | qe_participation_rate             |           7 |   0.00 | higher_is_better |             90 |                80 |                 70      
+ 17 | Automation Coverage %             | automation_coverage               |           8 |  70.00 | higher_is_better |             75 |                65 |                 50      
+ 18 | Manual Regression %               | manual_regression                 |           8 |  30.00 | lower_is_better  |             25 |                35 |                 50      
+ 19 | Total Prod Bugs - Last 3 Months   | prod_bugs_3_months                |           9 |  40.00 | lower_is_better  |             20 |                30 |                 40      
+ 20 | Total Prod Bugs - Last 1 Month    | prod_bugs_1_month                 |           9 |  60.00 | lower_is_better  |              5 |                10 |                 15      
+ 21 | Requirements → Scenario Coverage  | requirements_scenario_coverage    |          10 |  15.00 | higher_is_better |             95 |                80 |              --   60    
+ 22 | Scenario → Test Case Coverage     | scenario_test_case_coverage       |          10 |  15.00 | higher_is_better |             95 |                80 |              --   60    
+ 23 | Test Execution Coverage           | test_execution_coverage           |          10 |  15.00 | higher_is_better |             95 |                80 |                 60      
+ 24 | SIT Flow Coverage                 | sit_flow_coverage                 |          10 |  10.00 | higher_is_better |             95 |                80 |                 60      
+ 25 | API / Interface Coverage          | api_interface_coverage            |          10 |  10.00 | higher_is_better |             95 |                80 |                 60      
+ 26 | UAT Business Process Coverage     | uat_business_process_coverage     |          10 |  10.00 | higher_is_better |             95 |                80 |                 60      
+ 27 | Risk-Based Coverage               | risk_based_coverage               |          10 |  15.00 | higher_is_better |            100 |                85 |                 70      
+ 28 | Defect Leakage from SIT           | sit_defect_leakage                |          11 |  20.00 | lower_is_better  |             10 |                20 |                 30      
+ 29 | Defect Leakage from UAT           | uat_defect_leakage                |          11 |  15.00 | lower_is_better  |             10 |                20 |                 30      
+ 30 | Regression Automation Detection % | regression_automation_detection   |          11 |  20.00 | higher_is_better |             80 |                60 |                 40      
+ 31 | Detection per 100 Automated Tests | detection_per_100_automated_tests |          11 |  10.00 | higher_is_better |              5 |                 2 |                  1      
+ 32 | High-Risk Detection %             | high_risk_detection               |          11 |  20.00 | higher_is_better |             90 |                70 |                 50      
+ 33 | Missed Regression Defects         | missed_regression_defects         |          11 |  15.00 | lower_is_better  |              0 |                 2 |                  5      
+ 34 | Defect Severity Mix - Late Stage  | defect_severity_mix_late_stage    |          12 |  35.00 | lower_is_better  |              5 |                10 |                 20      
+ 35 | Test Case Reopen Rate             | test_case_reopen_rate             |          12 |  30.00 | lower_is_better  |              5 |                10 |                 20      
+ 36 | Production Incident Volume        | production_incident_volume        |          12 |  35.00 | lower_is_better  |              0 |                 3 |                  5      
+(26 rows)
