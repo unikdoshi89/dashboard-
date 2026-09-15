@@ -324,6 +324,12 @@ def create_or_update_jira_config(
                 config_data.jql.strip()
             ),
 
+            feature_jql=(
+                config_data.feature_jql.strip()
+            ),
+
+
+
             # Project-specific UAT label
             uat_label=(
                 config_data.uat_label.strip()
@@ -361,6 +367,7 @@ def create_or_update_jira_config(
         "jira_url": config.jira_url,
         "jira_email": config.jira_email,
         "jql": config.jql,
+        "feature_jql": config.feature_jql,
 
         # Return configured labels
         "uat_label": config.uat_label,
@@ -727,13 +734,13 @@ async def get_jira_bugs(
     # 9. Return response
     # ========================================================
         # Pagination
-        total = len(bugs)
-        start = (page - 1) * per_page
-        end = start + per_page
+    total = len(bugs)
+    start = (page - 1) * per_page
+    end = start + per_page
 
-        paged_bugs = bugs[start:end]
-        paged_uat = uat_bugs[start:end]
-        paged_prod = prod_bugs[start:end]
+    paged_bugs = bugs[start:end]
+    paged_uat = uat_bugs[start:end]
+    paged_prod = prod_bugs[start:end]
     return {
         "configured": True,
         "project_id": project_id,
@@ -1041,4 +1048,3 @@ async def get_jira_features(
         "pages": pages,
         "features": features,
     }
-
