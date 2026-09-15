@@ -180,6 +180,9 @@ Traceback (most recent call last):
 UnboundLocalError: local variable 'total' referenced before assignment
 
 
+Unable to fetch Jira features: Jira API failed: 400 - {"errorMessages":["Error in the JQL Query: Expecting either 'OR' or 'AND' but got 'Embedded'. (line 1, character 15)"],"errors":{}}
+
+
 
 
 
