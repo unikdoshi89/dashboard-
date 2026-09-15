@@ -1576,7 +1576,6 @@ if (prodLabels.length === 0) {
           </div>
         )}
       </div>
-
     </div>
   );
 }
