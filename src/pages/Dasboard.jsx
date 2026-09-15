@@ -10,7 +10,8 @@ import {
   ShieldCheck,
   Target,
   TrendingUp,
-  Download
+  Download,
+  Calculator
 } from "lucide-react";
 
 import {
@@ -671,6 +672,17 @@ useEffect(() => {
         className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50"
       >
         Jira Details
+      </button>
+
+      <button
+        type="button"
+        onClick={() => {
+          setShowDetailsMenu(false);
+          navigate(`/calculation-details/${selectedProjectId}`);
+        }}
+        className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50"
+      >
+        Calculation Details
       </button>
 
     </div>
