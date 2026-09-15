@@ -77,5 +77,14 @@ qe_governance-# ORDER BY category_id, id;
 
 
 
+import CalculationDetails from "./pages/CalculationDetails";
+
+<Route
+  path="/calculation-details/:projectId"
+  element={<CalculationDetails />}
+/>
+
+
+
 
 alembic revision -m "merge coverage into test design and update quality categories"
