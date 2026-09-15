@@ -132,6 +132,11 @@ def calculate_category_score(
 ):
     """
     Calculate weighted score for one metric category.
+
+    Rules:
+    - Only enabled metrics with positive weights are considered.
+    - Missing metric value = score 0.
+    - Missing metric value does NOT remove the metric weight.
     """
 
     project_metrics = (
@@ -143,7 +148,7 @@ def calculate_category_score(
         )
         .filter(
             ProjectMetric.project_id == project_id,
-            ProjectMetric.enabled == True,
+            ProjectMetric.enabled.is_(True),
             MetricDefinition.category_id == category.id,
         )
         .all()
@@ -166,6 +171,14 @@ def calculate_category_score(
         if not metric_definition:
             continue
 
+        weight = Decimal(
+            str(metric_definition.weight)
+        )
+
+        # Ignore metrics intentionally configured with zero weight.
+        if weight <= 0:
+            continue
+
         metric_value = (
             db.query(MetricValue)
             .filter(
@@ -178,74 +191,35 @@ def calculate_category_score(
             .first()
         )
 
-        print(
-            "QUALITY SCORE DEBUG:",
-            {
-                "project_id": project_id,
-                "category": category.name,
-                "metric": metric_definition.name,
-                "project_metric_id": project_metric.id,
-                "enabled": project_metric.enabled,
-                "value": (
-                    metric_value.value
-                    if metric_value
-                    else None
-                ),
-                "metric_weight":
-                    metric_definition.weight,
-                "category_weight":
-                    category.weight,
-                "direction":
-                    metric_definition.direction,
-                "target":
-                    metric_definition.default_target,
-                "warning":
-                    metric_definition.warning_threshold,
-                "critical":
-                    metric_definition.critical_threshold,
-            }
-        )
+        # --------------------------------------------------------
+        # Missing metric value = ZERO SCORE
+        # Metric weight is still included.
+        # --------------------------------------------------------
 
         if not metric_value:
-            continue
+            score = Decimal("0")
+        else:
+            score = calculate_metric_score(
+                metric_value.value,
+                metric_definition,
+            )
 
-        score = calculate_metric_score(
-            metric_value.value,
-            metric_definition,
-        )
+            # A None score is also treated as zero.
+            if score is None:
+                score = Decimal("0")
 
-        print(
-            "QUALITY SCORE RESULT:",
-            {
-                "metric": metric_definition.name,
-                "value": metric_value.value,
-                "score": score,
-            }
-        )
-
-        if score is None:
-            continue
-
-        weight = Decimal(
-            str(metric_definition.weight)
-        )
-
-        if weight <= 0:
-            continue
-
-        weighted_score += (
-            score * weight
-        )
-
+        weighted_score += score * weight
         total_weight += weight
 
     if total_weight == 0:
-        return None
+        return Decimal("0")
 
     return (
         weighted_score
         / total_weight
     )
+
+
 def calculate_quality_confidence_score(
     db,
     project_id,
@@ -265,60 +239,71 @@ def calculate_quality_confidence_score(
 
     for category in categories:
 
+        category_weight = Decimal(
+            str(category.weight)
+        )
+
+        # Ignore categories intentionally configured
+        # with zero or negative weight.
+        if category_weight <= 0:
+            continue
+
         score = calculate_category_score(
             db,
             project_id,
             category,
         )
 
-        weight = Decimal(
-            str(category.weight)
-        )
+        # --------------------------------------------------------
+        # Missing category data = ZERO SCORE
+        # Category weight is STILL included.
+        # --------------------------------------------------------
+
+        if score is None:
+            score = Decimal("0")
 
         category_results.append(
             {
                 "category_id": category.id,
                 "category_name": category.name,
-                "score": (
-                    float(score)
-                    if score is not None
-                    else None
+                "score": round(
+                    float(score),
+                    2,
                 ),
-                "weight": float(weight),
+                "weight": float(
+                    category_weight
+                ),
             }
         )
 
-        if score is not None and weight > 0:
+        total_score += (
+            score * category_weight
+        )
 
-            total_score += (
-                score * weight
-            )
-
-            total_weight += weight
+        # IMPORTANT:
+        # Always include the category weight,
+        # even when its score is zero.
+        total_weight += category_weight
 
     if total_weight == 0:
-
-        overall_score = None
-
+        overall_score = Decimal("0")
     else:
-
         overall_score = (
-            total_score / total_weight
+            total_score
+            / total_weight
         )
 
     return {
         "project_id": project_id,
-        "score": (
-            round(float(overall_score), 2)
-            if overall_score is not None
-            else None
+        "score": round(
+            float(overall_score),
+            2,
         ),
         "status": get_score_status(
             overall_score
         ),
         "categories": category_results,
     }
-
 def get_score_status(score):
 
     if score is None:
