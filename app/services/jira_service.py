@@ -22,7 +22,10 @@ async def test_jira_connection(
 
         response = await client.get(
             url,
-            auth=(jira_email, jira_api_token),
+            auth=(
+                jira_email,
+                jira_api_token,
+            ),
             headers=headers,
         )
 
@@ -42,9 +45,6 @@ async def test_jira_connection(
         "email": data.get("emailAddress"),
         "account_id": data.get("accountId"),
     }
-
-
-import httpx
 
 
 async def search_jira_bugs(
@@ -132,6 +132,7 @@ async def search_jira_bugs(
         "total": len(all_issues),
     }
 
+
 async def search_jira_features(
     jira_url: str,
     jira_email: str,
@@ -139,7 +140,10 @@ async def search_jira_features(
     jql: str,
     max_results: int = 100,
 ):
-    url = f"{jira_url.rstrip('/')}/rest/api/3/search/jql"
+    url = (
+        f"{jira_url.rstrip('/')}"
+        "/rest/api/3/search/jql"
+    )
 
     headers = {
         "Accept": "application/json",
@@ -149,8 +153,13 @@ async def search_jira_features(
     all_features = []
     next_page_token = None
 
-    async with httpx.AsyncClient(timeout=60, verify=False) as client:
+    async with httpx.AsyncClient(
+        timeout=60,
+        verify=False,
+    ) as client:
+
         while True:
+
             payload = {
                 "jql": jql,
                 "maxResults": max_results,
@@ -164,31 +173,48 @@ async def search_jira_features(
                     "updated",
                     "labels",
                     "parent",
-                    "customfield_10008",  # Story points
                 ],
             }
 
+            # Add pagination token only after first request
             if next_page_token:
                 payload["nextPageToken"] = next_page_token
 
             response = await client.post(
                 url,
-                auth=(jira_email, jira_api_token),
+                auth=(
+                    jira_email,
+                    jira_api_token,
+                ),
                 headers=headers,
                 json=payload,
             )
 
             if response.status_code != 200:
                 raise RuntimeError(
-                    f"Jira API failed: {response.status_code} - {response.text}"
+                    f"Jira API failed: "
+                    f"{response.status_code} - "
+                    f"{response.text}"
                 )
 
             data = response.json()
-            features = data.get("issues", [])
+
+            features = data.get(
+                "issues",
+                [],
+            )
+
             all_features.extend(features)
 
-            next_page_token = data.get("nextPageToken")
+            # Jira returns this when another page exists
+            next_page_token = data.get(
+                "nextPageToken"
+            )
+
             if not next_page_token:
                 break
 
-    return {"issues": all_features, "total": len(all_features)}
+    return {
+        "issues": all_features,
+        "total": len(all_features),
+    }
