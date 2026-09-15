@@ -80,6 +80,29 @@ def _is_yes(value):
         "TRUE",
         "1",
     )
+def _notes_indicate_no_data(notes):
+    """
+    Return True when metric notes explicitly indicate
+    that data is not available.
+    """
+
+    if not notes:
+        return False
+
+    notes_text = str(notes).strip().lower()
+
+    no_data_phrases = (
+        "no data",
+        "no data available",
+        "data not available",
+        "not available",
+        "no information available",
+    )
+
+    return any(
+        phrase in notes_text
+        for phrase in no_data_phrases
+    )    
 
 
 def generate_project_report_pdf(
@@ -591,44 +614,50 @@ def generate_project_report_pdf(
         ) in project_metrics:
 
             value = (
-                _safe_float(
-                    metric_value.value
-                )
-                if metric_value
-                else None
-            )
+    _safe_float(
+        metric_value.value
+    )
+    if metric_value
+    else None
+)
 
-            target = _safe_float(
-                definition.default_target
-            )
+target = _safe_float(
+    definition.default_target
+)
 
-            status = (
-                metric_value.status
-                if metric_value
-                else "NO_DATA"
-            )
+notes = (
+    metric_value.notes
+    if metric_value
+    else None
+)
 
-            metric_rows.append(
-                [
-                    definition.name,
-                    (
-                        f"{value:.2f}"
-                        if value is not None
-                        else "N/A"
-                    ),
-                    definition.unit,
-                    (
-                        f"{target:.2f}"
-                        if target is not None
-                        else "N/A"
-                    ),
-                    status,
-                ]
-            )
+is_no_data = (
+    metric_value is None
+    or value is None
+    or value == 0
+    or _notes_indicate_no_data(notes)
+)
 
-            metric_statuses.append(
-                status
-            )
+if is_no_data:
+    display_value = "NO_DATA"
+    status = "NO_DATA"
+else:
+    display_value = f"{value:.2f}"
+    status = metric_value.status or "NO_DATA"
+
+metric_rows.append(
+    [
+        definition.name,
+        display_value,
+        definition.unit,
+        (
+            f"{target:.2f}"
+            if target is not None
+            else "N/A"
+        ),
+        status,
+    ]
+)
 
         metric_table = Table(
             metric_rows,
