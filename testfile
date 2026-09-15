@@ -88,3 +88,32 @@ import CalculationDetails from "./pages/CalculationDetails";
 
 
 alembic revision -m "merge coverage into test design and update quality categories"
+
+
+
+{
+  "jira_url": "https://hdfcbankltd.atlassian.net/",
+  "jira_email": "manish.sehgal1@hdfc.bank.in",
+  "jira_api_token": "",
+  "jql": "project = "TPP Embedded Insurance" and issuetype = Bug and createdDate >=01-01-2026",
+  "feature_jql": "project = TPP Embedded Insurance and issuetype = Story",
+  "uat_label": "Insurenow_CRM",
+  "prod_label": "Production_Issues",
+  "active": true
+}
+{
+  "detail": [
+    {
+      "type": "json_invalid",
+      "loc": [
+        "body",
+        338
+      ],
+      "msg": "JSON decode error",
+      "input": {},
+      "ctx": {
+        "error": "Expecting ',' delimiter"
+      }
+    }
+  ]
+}
