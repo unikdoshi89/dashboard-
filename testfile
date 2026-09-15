@@ -117,3 +117,127 @@ alembic revision -m "merge coverage into test design and update quality categori
     }
   ]
 }
+
+
+
+
+
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/uvicorn/protocols/http/h11_impl.py", line 416, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/uvicorn/middleware/proxy_headers.py", line 63, in __call__
+    return await self.app(scope, receive, send)
+  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/fastapi/applications.py", line 1163, in __call__
+    await super().__call__(scope, receive, send)
+  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/starlette/applications.py", line 96, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/starlette/middleware/errors.py", line 186, in __call__
+    raise exc
+  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/starlette/middleware/errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/starlette/middleware/cors.py", line 96, in __call__
+    await self.simple_response(scope, receive, send, request_headers=headers)
+  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/starlette/middleware/cors.py", line 154, in simple_response
+    await self.app(scope, receive, send)
+  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/starlette/middleware/exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/fastapi/middleware/asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/starlette/routing.py", line 670, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/fastapi/routing.py", line 2734, in app
+    await route.handle(scope, receive, send)
+  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/fastapi/routing.py", line 1780, in handle
+    await self.original_router.handle(scope, receive, send)
+  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/fastapi/routing.py", line 2789, in handle
+    await included_router._handle_selected(scope, receive, send)
+  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/fastapi/routing.py", line 1791, in _handle_selected
+    await route.handle(scope, receive, send)
+  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/fastapi/routing.py", line 1780, in handle
+    await self.original_router.handle(scope, receive, send)
+  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/fastapi/routing.py", line 2789, in handle
+    await included_router._handle_selected(scope, receive, send)
+  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/fastapi/routing.py", line 1800, in _handle_selected
+    await original_route.handle(scope, receive, send)
+  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/fastapi/routing.py", line 1279, in handle
+    await app(scope, receive, send)
+  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/fastapi/routing.py", line 158, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/fastapi/routing.py", line 144, in app
+    response = await f(request)
+  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/fastapi/routing.py", line 706, in app
+    raw_response = await run_endpoint_function(
+  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/fastapi/routing.py", line 354, in run_endpoint_function
+    return await run_in_threadpool(dependant.call, **values)
+  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/starlette/concurrency.py", line 34, in run_in_threadpool
+    return await anyio.to_thread.run_sync(func)
+  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/anyio/to_thread.py", line 65, in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/anyio/_backends/_asyncio.py", line 2641, in run_sync_in_worker_thread
+    return await future
+  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/anyio/_backends/_asyncio.py", line 1033, in run
+    result = context.run(func, *args)
+  File "/Users/u2515/code/dashboard-backend/app/api/routes/jira.py", line 348, in create_or_update_jira_config
+    db.commit()
+  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/sqlalchemy/orm/session.py", line 2035, in commit
+    trans.commit(_to_root=True)
+  File "<string>", line 2, in commit
+  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/sqlalchemy/orm/state_changes.py", line 137, in _go
+    ret_value = fn(self, *arg, **kw)
+  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/sqlalchemy/orm/session.py", line 1316, in commit
+    self._prepare_impl()
+  File "<string>", line 2, in _prepare_impl
+  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/sqlalchemy/orm/state_changes.py", line 137, in _go
+    ret_value = fn(self, *arg, **kw)
+  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/sqlalchemy/orm/session.py", line 1290, in _prepare_impl
+    self.session.flush()
+  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/sqlalchemy/orm/session.py", line 4353, in flush
+    self._flush(objects)
+  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/sqlalchemy/orm/session.py", line 4488, in _flush
+    with util.safe_reraise():
+  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/sqlalchemy/util/langhelpers.py", line 122, in __exit__
+    raise exc_value.with_traceback(exc_tb)
+  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/sqlalchemy/orm/session.py", line 4449, in _flush
+    flush_context.execute()
+  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/sqlalchemy/orm/unitofwork.py", line 465, in execute
+    rec.execute(self)
+  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/sqlalchemy/orm/unitofwork.py", line 641, in execute
+    util.preloaded.orm_persistence.save_obj(
+  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/sqlalchemy/orm/persistence.py", line 94, in save_obj
+    _emit_insert_statements(
+  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/sqlalchemy/orm/persistence.py", line 1234, in _emit_insert_statements
+    result = connection.execute(
+  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/sqlalchemy/engine/base.py", line 1421, in execute
+    return meth(
+  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/sqlalchemy/sql/elements.py", line 526, in _execute_on_connection
+    return connection._execute_clauseelement(
+  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/sqlalchemy/engine/base.py", line 1643, in _execute_clauseelement
+    ret = self._execute_context(
+  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/sqlalchemy/engine/base.py", line 1848, in _execute_context
+    return self._exec_single_context(
+  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/sqlalchemy/engine/base.py", line 1988, in _exec_single_context
+    self._handle_dbapi_exception(
+  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/sqlalchemy/engine/base.py", line 2365, in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/sqlalchemy/engine/base.py", line 1969, in _exec_single_context
+    self.dialect.do_execute(
+  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/sqlalchemy/engine/default.py", line 952, in do_execute
+    cursor.execute(statement, parameters)
+sqlalchemy.exc.IntegrityError: (psycopg2.errors.NotNullViolation) null value in column "feature_jql" of relation "jira_configurations" violates not-null constraint
+DETAIL:  Failing row contains (16, 6, https://hdfcbankltd.atlassian.net/, manish.sehgal1@hdfc.bank.in, ATATT3xFfGF0Q9UqtAsn1UyHcQ7Mu8j8wAD4c-2nbrsD3P5Ftr0BDFdze6LSgW28..., project = "TPP Embedded Insurance" and issuetype = Bug and creat..., t, 2026-09-15 10:56:55.800893, 2026-09-15 10:56:55.800896, Insurenow_CRM, Production_Issues, null).
+
+[SQL: INSERT INTO jira_configurations (project_id, jira_url, jira_email, jira_api_token, jql, feature_jql, uat_label, prod_label, active, created_at, updated_at) VALUES (%(project_id)s, %(jira_url)s, %(jira_email)s, %(jira_api_token)s, %(jql)s, %(feature_jql)s, %(uat_label)s, %(prod_label)s, %(active)s, %(created_at)s, %(updated_at)s) RETURNING jira_configurations.id]
+[parameters: {'project_id': 6, 'jira_url': 'https://hdfcbankltd.atlassian.net/', 'jira_email': 'manish.sehgal1@hdfc.bank.in', 'jira_api_token': 'ATATT3xFfGF0Q9UqtAsn1UyHcQ7Mu8j8wAD4c-2nbrsD3P5Ftr0BDFdze6LSgW28XQpaLGXxOaU8TXMxQipd9LD8UsGHXq5mUKWsilOjbYN5c4PFLfSKgpDZIMGhGak9lIoQXIx-H6E7ICR4fXZsjfoFFXj7bKLwzeJpobucnZQ6ZB6_5PCkLmU=A4615885', 'jql': 'project = "TPP Embedded Insurance" and issuetype = Bug and createdDate >= 01-01-2026', 'feature_jql': None, 'uat_label': 'Insurenow_CRM', 'prod_label': 'Production_Issues', 'active': True, 'created_at': datetime.datetime(2026, 9, 15, 10, 56, 55, 800893), 'updated_at': datetime.datetime(2026, 9, 15, 10, 56, 55, 800896)}]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+
