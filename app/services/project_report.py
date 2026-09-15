@@ -102,7 +102,7 @@ def _notes_indicate_no_data(notes):
     return any(
         phrase in notes_text
         for phrase in no_data_phrases
-    )    
+    )
 
 
 def generate_project_report_pdf(
@@ -1564,7 +1564,7 @@ notes = (
     # FOOTER
     # ==========================================================
 
-    def add_page_number(canvas, doc):
+def add_page_number(canvas, doc):
         canvas.saveState()
 
         canvas.setFont(
