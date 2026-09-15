@@ -102,7 +102,7 @@ def _notes_indicate_no_data(notes):
     return any(
         phrase in notes_text
         for phrase in no_data_phrases
-    )
+    )    
 
 
 def generate_project_report_pdf(
@@ -608,28 +608,63 @@ def generate_project_report_pdf(
         metric_statuses = []
 
         for (
-    project_metric,
-    definition,
-    metric_value,
-) in project_metrics:
+            project_metric,
+            definition,
+            metric_value,
+        ) in project_metrics:
 
-    value = (
-    _safe_float(
-        metric_value.value
-    )
-    if metric_value
-    else None
-)
+            value = (
+                _safe_float(
+                    metric_value.value
+                )
+                if metric_value
+                else None
+            )
 
-target = _safe_float(
-    definition.default_target
-)
+            target = _safe_float(
+                definition.default_target
+            )
 
-notes = (
-    metric_value.notes
-    if metric_value
-    else None
-)
+            notes = (
+                metric_value.notes
+                if metric_value
+                else None
+            )
+
+            is_no_data = (
+                metric_value is None
+                or value is None
+                or value == 0
+                or _notes_indicate_no_data(notes)
+            )
+
+            if is_no_data:
+                display_value = "NO_DATA"
+                status = "NO_DATA"
+            else:
+                display_value = f"{value:.2f}"
+                status = (
+                    metric_value.status
+                    or "NO_DATA"
+                )
+
+            metric_rows.append(
+                [
+                    definition.name,
+                    display_value,
+                    definition.unit,
+                    (
+                        f"{target:.2f}"
+                        if target is not None
+                        else "N/A"
+                    ),
+                    status,
+                ]
+            )
+
+            metric_statuses.append(
+                status
+            )
 
         metric_table = Table(
             metric_rows,
@@ -1564,7 +1599,7 @@ notes = (
     # FOOTER
     # ==========================================================
 
-def add_page_number(canvas, doc):
+    def add_page_number(canvas, doc):
         canvas.saveState()
 
         canvas.setFont(
