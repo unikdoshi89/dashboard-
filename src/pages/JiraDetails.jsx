@@ -67,15 +67,20 @@ function JiraDetails() {
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState("all");
 
+  // ============================================================
+  // Jira Features / Stories
+  // ============================================================
+
   const [features, setFeatures] = useState([]);
   const [loadingFeatures, setLoadingFeatures] = useState(false);
+
   const [featurePage, setFeaturePage] = useState(1);
   const [featurePerPage] = useState(20);
   const [featureTotal, setFeatureTotal] = useState(0);
   const [featurePages, setFeaturePages] = useState(1);
+
   const [featureSearch, setFeatureSearch] = useState("");
   const [featuresError, setFeaturesError] = useState("");
-
 
   // ============================================================
   // Load Jira configuration
@@ -101,18 +106,18 @@ function JiraDetails() {
       setFeatureJql(data.feature_jql || "");
 
       setUatLabels(
-  (data.uat_label || "")
-    .split(",")
-    .map(l => l.trim())
-    .filter(l => l !== "")
-);
+        (data.uat_label || "")
+          .split(",")
+          .map((l) => l.trim())
+          .filter((l) => l !== "")
+      );
 
-setProdLabels(
-  (data.prod_label || "")
-    .split(",")
-    .map(l => l.trim())
-    .filter(l => l !== "")
-);
+      setProdLabels(
+        (data.prod_label || "")
+          .split(",")
+          .map((l) => l.trim())
+          .filter((l) => l !== "")
+      );
 
       setActive(
         data.active !== undefined
@@ -123,7 +128,6 @@ setProdLabels(
       setHasApiToken(
         Boolean(data.has_api_token)
       );
-
     } catch (err) {
       console.error(
         "Unable to load Jira configuration:",
@@ -140,17 +144,20 @@ setProdLabels(
   }
 
   // ============================================================
-  // Load Jira bugs
+  // Load Jira Features / Stories
   // ============================================================
 
-  async function loadFeatures(searchValue = featureSearch) {
+  async function loadFeatures(
+    searchValue = featureSearch,
+    page = featurePage
+  ) {
     try {
       setLoadingFeatures(true);
       setFeaturesError("");
 
       const data = await getJiraFeatures(
         projectId,
-        featurePage,
+        page,
         featurePerPage,
         searchValue
       );
@@ -162,15 +169,30 @@ setProdLabels(
         return;
       }
 
-      setFeatures(data.features || []);
-      setFeatureTotal(data.total || 0);
-      setFeaturePages(data.pages || 1);
+      setFeatures(
+        Array.isArray(data.features)
+          ? data.features
+          : []
+      );
+
+      setFeatureTotal(
+        Number(data.total || 0)
+      );
+
+      setFeaturePages(
+        Number(data.pages || 1)
+      );
     } catch (err) {
-      console.error("Unable to load Jira features/stories:", err);
+      console.error(
+        "Unable to load Jira features/stories:",
+        err
+      );
+
       setFeaturesError(
         err?.response?.data?.detail ||
         "Unable to fetch Jira features/stories."
       );
+
       setFeatures([]);
       setFeatureTotal(0);
       setFeaturePages(0);
@@ -181,11 +203,20 @@ setProdLabels(
 
   useEffect(() => {
     if (configured) {
-      loadFeatures();
+      loadFeatures(
+        featureSearch,
+        featurePage
+      );
     }
   }, [configured, featurePage]);
 
-  async function loadBugs(searchValue = search) {
+  // ============================================================
+  // Load Jira Bugs
+  // ============================================================
+
+  async function loadBugs(
+    searchValue = search
+  ) {
     try {
       setLoadingBugs(true);
       setBugsError("");
@@ -205,10 +236,23 @@ setProdLabels(
 
       setConfigured(true);
 
-      setBugs(data.bugs || []);
-      setUatBugs(data.uat_bugs || []);
-      setProdBugs(data.prod_bugs || []);
+      setBugs(
+        Array.isArray(data.bugs)
+          ? data.bugs
+          : []
+      );
 
+      setUatBugs(
+        Array.isArray(data.uat_bugs)
+          ? data.uat_bugs
+          : []
+      );
+
+      setProdBugs(
+        Array.isArray(data.prod_bugs)
+          ? data.prod_bugs
+          : []
+      );
     } catch (err) {
       console.error(
         "Unable to load Jira bugs:",
@@ -223,7 +267,6 @@ setProdLabels(
       setBugs([]);
       setUatBugs([]);
       setProdBugs([]);
-
     } finally {
       setLoadingBugs(false);
     }
@@ -268,14 +311,18 @@ setProdLabels(
       }
 
       if (uatLabels.length === 0) {
-  setConfigError("At least one UAT issue label is required.");
-  return;
-}
+        setConfigError(
+          "At least one UAT issue label is required."
+        );
+        return;
+      }
 
-if (prodLabels.length === 0) {
-  setConfigError("At least one Production issue label is required.");
-  return;
-}
+      if (prodLabels.length === 0) {
+        setConfigError(
+          "At least one Production issue label is required."
+        );
+        return;
+      }
 
       if (
         !configured &&
@@ -290,8 +337,7 @@ if (prodLabels.length === 0) {
       const payload = {
         jira_url: jiraUrl.trim(),
         jira_email: jiraEmail.trim(),
-        jira_api_token:
-          jiraApiToken.trim(),
+        jira_api_token: jiraApiToken.trim(),
         jql: jql.trim(),
         feature_jql: featureJql.trim(),
         uat_label: uatLabels.join(","),
@@ -319,10 +365,11 @@ if (prodLabels.length === 0) {
 
       // Load Jira issues after saving
       await loadBugs("");
+
       setFeatureSearch("");
       setFeaturePage(1);
-      await loadFeatures("");
 
+      await loadFeatures("", 1);
     } catch (err) {
       console.error(
         "Unable to save Jira configuration:",
@@ -333,7 +380,6 @@ if (prodLabels.length === 0) {
         err?.response?.data?.detail ||
         "Unable to save Jira configuration."
       );
-
     } finally {
       setSavingConfig(false);
     }
@@ -358,7 +404,6 @@ if (prodLabels.length === 0) {
         data.message ||
         "Jira connection successful."
       );
-
     } catch (err) {
       console.error(
         "Unable to connect to Jira:",
@@ -369,14 +414,13 @@ if (prodLabels.length === 0) {
         err?.response?.data?.detail ||
         "Unable to connect to Jira."
       );
-
     } finally {
       setTestingConnection(false);
     }
   }
 
   // ============================================================
-  // Search
+  // Bug Search
   // ============================================================
 
   async function handleSearch(event) {
@@ -390,16 +434,26 @@ if (prodLabels.length === 0) {
     loadBugs("");
   }
 
+  // ============================================================
+  // Feature / Story Search
+  // ============================================================
+
   async function handleFeatureSearch(event) {
     event.preventDefault();
+
     setFeaturePage(1);
-    await loadFeatures(featureSearch);
+
+    await loadFeatures(
+      featureSearch,
+      1
+    );
   }
 
   async function handleClearFeatureSearch() {
     setFeatureSearch("");
     setFeaturePage(1);
-    await loadFeatures("");
+
+    await loadFeatures("", 1);
   }
 
   // ============================================================
@@ -409,14 +463,19 @@ if (prodLabels.length === 0) {
   async function handleRefresh() {
     await loadConfig();
 
+    // Use the current configuration state for refresh.
+    // If the project is configured, reload both sections.
     if (configured) {
       await loadBugs(search);
-      await loadFeatures(featureSearch);
+      await loadFeatures(
+        featureSearch,
+        featurePage
+      );
     }
   }
 
   // ============================================================
-  // Visible bugs
+  // Visible Bugs
   // ============================================================
 
   const visibleBugs =
@@ -436,7 +495,9 @@ if (prodLabels.length === 0) {
     }
 
     try {
-      return new Date(value).toLocaleString();
+      return new Date(
+        value
+      ).toLocaleString();
     } catch {
       return value;
     }
@@ -512,7 +573,7 @@ if (prodLabels.length === 0) {
   }
 
   // ============================================================
-  // Loading configuration
+  // Loading Configuration
   // ============================================================
 
   if (loadingConfig) {
@@ -573,6 +634,7 @@ if (prodLabels.length === 0) {
               onClick={handleRefresh}
               disabled={
                 loadingBugs ||
+                loadingFeatures ||
                 loadingConfig
               }
               className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
@@ -580,11 +642,13 @@ if (prodLabels.length === 0) {
               <RefreshCw
                 size={16}
                 className={
-                  loadingBugs
+                  loadingBugs ||
+                  loadingFeatures
                     ? "animate-spin"
                     : ""
                 }
               />
+
               Refresh
             </button>
 
@@ -656,7 +720,9 @@ if (prodLabels.length === 0) {
                   type="text"
                   value={jiraUrl}
                   onChange={(e) =>
-                    setJiraUrl(e.target.value)
+                    setJiraUrl(
+                      e.target.value
+                    )
                   }
                   placeholder="https://yourcompany.atlassian.net"
                   className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -675,7 +741,9 @@ if (prodLabels.length === 0) {
                   type="email"
                   value={jiraEmail}
                   onChange={(e) =>
-                    setJiraEmail(e.target.value)
+                    setJiraEmail(
+                      e.target.value
+                    )
                   }
                   placeholder="jira-user@company.com"
                   className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -694,7 +762,9 @@ if (prodLabels.length === 0) {
                   type="password"
                   value={jiraApiToken}
                   onChange={(e) =>
-                    setJiraApiToken(e.target.value)
+                    setJiraApiToken(
+                      e.target.value
+                    )
                   }
                   placeholder={
                     hasApiToken
@@ -749,7 +819,9 @@ if (prodLabels.length === 0) {
                 <textarea
                   value={jql}
                   onChange={(e) =>
-                    setJql(e.target.value)
+                    setJql(
+                      e.target.value
+                    )
                   }
                   rows={3}
                   placeholder='project = ABC AND issuetype = Bug'
@@ -762,6 +834,7 @@ if (prodLabels.length === 0) {
 
               </div>
 
+
               {/* Feature / Story JQL */}
 
               <div className="md:col-span-2">
@@ -773,7 +846,9 @@ if (prodLabels.length === 0) {
                 <textarea
                   value={featureJql}
                   onChange={(e) =>
-                    setFeatureJql(e.target.value)
+                    setFeatureJql(
+                      e.target.value
+                    )
                   }
                   rows={3}
                   placeholder='project = ABC AND issuetype in ("Feature", "Story")'
@@ -787,35 +862,41 @@ if (prodLabels.length === 0) {
               </div>
 
 
-              {/* UAT Label */}
-
               {/* UAT Labels */}
-<div>
-  <TagInput
-    label="UAT Issue Labels"
-    tags={uatLabels}
-    setTags={setUatLabels}
-    placeholder="Type a label and press Enter"
-  />
 
-  <p className="text-xs text-gray-500 mt-1">
-    Jira issues containing ANY of these labels will appear under UAT.
-  </p>
-</div>
+              <div>
 
-{/* Production Labels */}
-<div>
-  <TagInput
-    label="Production Issue Labels"
-    tags={prodLabels}
-    setTags={setProdLabels}
-    placeholder="Type a label and press Enter"
-  />
+                <TagInput
+                  label="UAT Issue Labels"
+                  tags={uatLabels}
+                  setTags={setUatLabels}
+                  placeholder="Type a label and press Enter"
+                />
 
-  <p className="text-xs text-gray-500 mt-1">
-    Jira issues containing ANY of these labels will appear under Production.
-  </p>
-</div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Jira issues containing ANY of these labels will appear under UAT.
+                </p>
+
+              </div>
+
+
+              {/* Production Labels */}
+
+              <div>
+
+                <TagInput
+                  label="Production Issue Labels"
+                  tags={prodLabels}
+                  setTags={setProdLabels}
+                  placeholder="Type a label and press Enter"
+                />
+
+                <p className="text-xs text-gray-500 mt-1">
+                  Jira issues containing ANY of these labels will appear under Production.
+                </p>
+
+              </div>
+
             </div>
 
 
@@ -829,20 +910,24 @@ if (prodLabels.length === 0) {
                 disabled={savingConfig}
                 className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 disabled:opacity-50"
               >
+
                 {savingConfig ? (
                   <>
                     <RefreshCw
                       size={16}
                       className="animate-spin"
                     />
+
                     Saving...
                   </>
                 ) : (
                   <>
                     <ShieldCheck size={16} />
+
                     Save Configuration
                   </>
                 )}
+
               </button>
 
 
@@ -855,20 +940,24 @@ if (prodLabels.length === 0) {
                 }
                 className="inline-flex items-center gap-2 px-5 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-semibold hover:bg-gray-50 disabled:opacity-50"
               >
+
                 {testingConnection ? (
                   <>
                     <RefreshCw
                       size={16}
                       className="animate-spin"
                     />
+
                     Testing...
                   </>
                 ) : (
                   <>
                     <CheckCircle size={16} />
+
                     Test Connection
                   </>
                 )}
+
               </button>
 
             </div>
@@ -886,10 +975,12 @@ if (prodLabels.length === 0) {
           <div className="bg-white rounded-xl border border-yellow-200 shadow-sm p-10 text-center">
 
             <div className="mx-auto w-12 h-12 rounded-full bg-yellow-50 flex items-center justify-center mb-4">
+
               <Settings
                 size={24}
                 className="text-yellow-600"
               />
+
             </div>
 
             <h2 className="text-lg font-semibold text-gray-900">
@@ -918,6 +1009,7 @@ if (prodLabels.length === 0) {
               <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
 
                 <div>
+
                   <h2 className="text-lg font-semibold text-gray-900">
                     Jira Issues
                   </h2>
@@ -925,6 +1017,7 @@ if (prodLabels.length === 0) {
                   <p className="text-sm text-gray-500 mt-1">
                     View Jira issues by environment.
                   </p>
+
                 </div>
 
 
@@ -956,6 +1049,7 @@ if (prodLabels.length === 0) {
 
                   </div>
 
+
                   <button
                     type="submit"
                     disabled={loadingBugs}
@@ -963,6 +1057,7 @@ if (prodLabels.length === 0) {
                   >
                     Search
                   </button>
+
 
                   {search && (
                     <button
@@ -981,9 +1076,7 @@ if (prodLabels.length === 0) {
             </div>
 
 
-            {/* =================================================
-                Tabs
-            ================================================== */}
+            {/* Tabs */}
 
             <div className="px-6 pt-4 border-b border-gray-200">
 
@@ -1002,6 +1095,7 @@ if (prodLabels.length === 0) {
                       : "text-gray-500 border-transparent hover:text-gray-700"
                   }`}
                 >
+
                   All
 
                   <span
@@ -1030,6 +1124,7 @@ if (prodLabels.length === 0) {
                       : "text-gray-500 border-transparent hover:text-gray-700"
                   }`}
                 >
+
                   UAT
 
                   <span
@@ -1058,6 +1153,7 @@ if (prodLabels.length === 0) {
                       : "text-gray-500 border-transparent hover:text-gray-700"
                   }`}
                 >
+
                   Production
 
                   <span
@@ -1077,54 +1173,55 @@ if (prodLabels.length === 0) {
             </div>
 
 
-            {/* =================================================
-                Search info
-            ================================================== */}
+            {/* Search info */}
 
             {search && (
               <div className="px-6 py-3 bg-gray-50 border-b border-gray-200">
 
                 <p className="text-sm text-gray-600">
+
                   Search results for{" "}
+
                   <span className="font-semibold text-gray-900">
                     "{search}"
                   </span>
+
                 </p>
 
               </div>
             )}
 
 
-            {/* =================================================
-                Error
-            ================================================== */}
+            {/* Error */}
 
             {bugsError && (
               <div className="mx-6 mt-5 flex items-center gap-2 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+
                 <XCircle size={18} />
+
                 {bugsError}
+
               </div>
             )}
 
 
-            {/* =================================================
-                Loading
-            ================================================== */}
+            {/* Loading */}
 
             {loadingBugs && (
               <div className="py-12 flex items-center justify-center gap-3 text-gray-500">
+
                 <RefreshCw
                   size={20}
                   className="animate-spin"
                 />
+
                 Loading Jira issues...
+
               </div>
             )}
 
 
-            {/* =================================================
-                Content
-            ================================================== */}
+            {/* Content */}
 
             {!loadingBugs && !bugsError && (
               <>
@@ -1146,11 +1243,15 @@ if (prodLabels.length === 0) {
                     </h3>
 
                     <p className="text-xs text-gray-500 mt-1">
+
                       Showing{" "}
+
                       <span className="font-semibold">
                         {visibleBugs.length}
                       </span>{" "}
+
                       issues
+
                     </p>
 
                   </div>
@@ -1161,13 +1262,16 @@ if (prodLabels.length === 0) {
                 {/* Empty state */}
 
                 {visibleBugs.length === 0 ? (
+
                   <div className="px-6 py-14 text-center">
 
                     <div className="mx-auto w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-4">
+
                       <Search
                         size={22}
                         className="text-gray-400"
                       />
+
                     </div>
 
                     <h3 className="text-sm font-semibold text-gray-900">
@@ -1179,11 +1283,10 @@ if (prodLabels.length === 0) {
                     </p>
 
                   </div>
+
                 ) : (
 
-                  /* =================================================
-                     Table
-                  ================================================== */
+                  /* Table */
 
                   <div className="overflow-x-auto">
 
@@ -1258,11 +1361,13 @@ if (prodLabels.length === 0) {
                                   rel="noreferrer"
                                   className="inline-flex items-center gap-1 font-semibold text-blue-600 hover:text-blue-800"
                                 >
+
                                   {bug.jira_id}
 
                                   <ExternalLink
                                     size={13}
                                   />
+
                                 </a>
 
                               </td>
@@ -1279,8 +1384,10 @@ if (prodLabels.length === 0) {
                                     ""
                                   }
                                 >
+
                                   {bug.summary ||
                                     "-"}
+
                                 </div>
 
                               </td>
@@ -1295,8 +1402,10 @@ if (prodLabels.length === 0) {
                                     bug.status
                                   )}`}
                                 >
+
                                   {bug.status ||
                                     "-"}
+
                                 </span>
 
                               </td>
@@ -1311,8 +1420,10 @@ if (prodLabels.length === 0) {
                                     bug.priority
                                   )}`}
                                 >
+
                                   {bug.priority ||
                                     "-"}
+
                                 </span>
 
                               </td>
@@ -1321,34 +1432,42 @@ if (prodLabels.length === 0) {
                               {/* Assignee */}
 
                               <td className="px-4 py-4 whitespace-nowrap text-gray-700">
+
                                 {bug.assignee ||
                                   "-"}
+
                               </td>
 
 
                               {/* Reporter */}
 
                               <td className="px-4 py-4 whitespace-nowrap text-gray-700">
+
                                 {bug.reporter ||
                                   "-"}
+
                               </td>
 
 
                               {/* Created */}
 
                               <td className="px-4 py-4 whitespace-nowrap text-gray-600">
+
                                 {formatDate(
                                   bug.created
                                 )}
+
                               </td>
 
 
                               {/* Updated */}
 
                               <td className="px-4 py-4 whitespace-nowrap text-gray-600">
+
                                 {formatDate(
                                   bug.updated
                                 )}
+
                               </td>
 
 
@@ -1358,18 +1477,24 @@ if (prodLabels.length === 0) {
 
                                 {bug.environment ===
                                 "UAT" ? (
+
                                   <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">
                                     UAT
                                   </span>
+
                                 ) : bug.environment ===
                                   "PROD" ? (
+
                                   <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-700">
                                     Production
                                   </span>
+
                                 ) : (
+
                                   <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
                                     -
                                   </span>
+
                                 )}
 
                               </td>
@@ -1400,182 +1525,463 @@ if (prodLabels.length === 0) {
 
         {configured && (
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm mt-6">
+
             <div className="px-6 py-5 border-b border-gray-200">
+
               <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+
                 <div>
-                  <h2 className="text-lg font-semibold text-gray-900">Features & Stories</h2>
+
+                  <h2 className="text-lg font-semibold text-gray-900">
+                    Features & Stories
+                  </h2>
+
                   <p className="text-sm text-gray-500 mt-1">
                     View Features and Stories using the configured Feature / Story JQL.
                   </p>
+
                 </div>
 
-                <form onSubmit={handleFeatureSearch} className="flex items-center gap-2">
+
+                <form
+                  onSubmit={
+                    handleFeatureSearch
+                  }
+                  className="flex items-center gap-2"
+                >
+
                   <div className="relative">
-                    <Search size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+
+                    <Search
+                      size={17}
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                    />
+
                     <input
                       type="text"
-                      value={featureSearch}
-                      onChange={(e) => setFeatureSearch(e.target.value)}
+                      value={
+                        featureSearch
+                      }
+                      onChange={(e) =>
+                        setFeatureSearch(
+                          e.target.value
+                        )
+                      }
                       placeholder="Search Feature / Story"
                       className="w-72 border border-gray-300 rounded-lg pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
+
                   </div>
+
 
                   <button
                     type="submit"
-                    disabled={loadingFeatures}
+                    disabled={
+                      loadingFeatures
+                    }
                     className="px-4 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 disabled:opacity-50"
                   >
                     Search
                   </button>
 
+
                   {featureSearch && (
                     <button
                       type="button"
-                      onClick={handleClearFeatureSearch}
+                      onClick={
+                        handleClearFeatureSearch
+                      }
                       className="px-3 py-2.5 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50"
                     >
                       Clear
                     </button>
                   )}
+
                 </form>
+
               </div>
+
             </div>
+
 
             {featureSearch && (
               <div className="px-6 py-3 bg-gray-50 border-b border-gray-200">
+
                 <p className="text-sm text-gray-600">
-                  Search results for <span className="font-semibold text-gray-900">"{featureSearch}"</span>
+
+                  Search results for{" "}
+
+                  <span className="font-semibold text-gray-900">
+                    "{featureSearch}"
+                  </span>
+
                 </p>
+
               </div>
             )}
+
 
             {featuresError && (
               <div className="mx-6 mt-5 flex items-center gap-2 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+
                 <XCircle size={18} />
+
                 {featuresError}
+
               </div>
             )}
+
 
             {loadingFeatures && (
               <div className="py-12 flex items-center justify-center gap-3 text-gray-500">
-                <RefreshCw size={20} className="animate-spin" />
+
+                <RefreshCw
+                  size={20}
+                  className="animate-spin"
+                />
+
                 Loading Features and Stories...
+
               </div>
             )}
 
-            {!loadingFeatures && !featuresError && (
-              <>
-                <div className="px-6 py-4 flex items-center justify-between">
-                  <div>
-                    <h3 className="font-semibold text-gray-900">Feature / Story Issues</h3>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Showing <span className="font-semibold">{features.length}</span> of <span className="font-semibold">{featureTotal}</span> issues
-                    </p>
-                  </div>
-                </div>
 
-                {features.length === 0 ? (
-                  <div className="px-6 py-14 text-center">
-                    <div className="mx-auto w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-4">
-                      <Search size={22} className="text-gray-400" />
+            {!loadingFeatures &&
+              !featuresError && (
+                <>
+
+                  <div className="px-6 py-4 flex items-center justify-between">
+
+                    <div>
+
+                      <h3 className="font-semibold text-gray-900">
+                        Feature / Story Issues
+                      </h3>
+
+                      <p className="text-xs text-gray-500 mt-1">
+
+                        Showing{" "}
+
+                        <span className="font-semibold">
+                          {features.length}
+                        </span>{" "}
+
+                        of{" "}
+
+                        <span className="font-semibold">
+                          {featureTotal}
+                        </span>{" "}
+                        issues
+
+                      </p>
+
                     </div>
-                    <h3 className="text-sm font-semibold text-gray-900">No Features or Stories found</h3>
-                    <p className="text-sm text-gray-500 mt-1">
-                      Check your Feature / Story JQL or try a different search.
-                    </p>
+
                   </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead className="bg-gray-50 border-y border-gray-200">
-                        <tr>
-                          <th className="text-left px-6 py-3 font-semibold text-gray-600 whitespace-nowrap">Jira ID</th>
-                          <th className="text-left px-4 py-3 font-semibold text-gray-600 whitespace-nowrap">Type</th>
-                          <th className="text-left px-4 py-3 font-semibold text-gray-600 min-w-[300px]">Summary</th>
-                          <th className="text-left px-4 py-3 font-semibold text-gray-600 whitespace-nowrap">Status</th>
-                          <th className="text-left px-4 py-3 font-semibold text-gray-600 whitespace-nowrap">Priority</th>
-                          <th className="text-left px-4 py-3 font-semibold text-gray-600 whitespace-nowrap">Assignee</th>
-                          <th className="text-left px-4 py-3 font-semibold text-gray-600 whitespace-nowrap">Story Points</th>
-                          <th className="text-left px-4 py-3 font-semibold text-gray-600 whitespace-nowrap">Created</th>
-                          <th className="text-left px-4 py-3 font-semibold text-gray-600 whitespace-nowrap">Updated</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-100">
-                        {features.map((issue) => (
-                          <tr key={issue.jira_id} className="hover:bg-gray-50">
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <a
-                                href={getJiraIssueUrl(issue.jira_id)}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="inline-flex items-center gap-1 font-semibold text-blue-600 hover:text-blue-800"
-                              >
-                                {issue.jira_id}
-                                <ExternalLink size={13} />
-                              </a>
-                            </td>
-                            <td className="px-4 py-4 whitespace-nowrap">
-                              <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-100 text-purple-700">
-                                {issue.issue_type || issue.issuetype || "-"}
-                              </span>
-                            </td>
-                            <td className="px-4 py-4">
-                              <div className="max-w-[420px] truncate text-gray-900" title={issue.summary || ""}>
-                                {issue.summary || "-"}
-                              </div>
-                            </td>
-                            <td className="px-4 py-4 whitespace-nowrap">
-                              <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${getStatusClass(issue.status)}`}>
-                                {issue.status || "-"}
-                              </span>
-                            </td>
-                            <td className="px-4 py-4 whitespace-nowrap">
-                              <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${getPriorityClass(issue.priority)}`}>
-                                {issue.priority || "-"}
-                              </span>
-                            </td>
-                            <td className="px-4 py-4 whitespace-nowrap text-gray-700">{issue.assignee || "-"}</td>
-                            <td className="px-4 py-4 whitespace-nowrap text-gray-700">{issue.story_points ?? "-"}</td>
-                            <td className="px-4 py-4 whitespace-nowrap text-gray-600">{formatDate(issue.created)}</td>
-                            <td className="px-4 py-4 whitespace-nowrap text-gray-600">{formatDate(issue.updated)}</td>
+
+
+                  {features.length === 0 ? (
+
+                    <div className="px-6 py-14 text-center">
+
+                      <div className="mx-auto w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-4">
+
+                        <Search
+                          size={22}
+                          className="text-gray-400"
+                        />
+
+                      </div>
+
+                      <h3 className="text-sm font-semibold text-gray-900">
+                        No Features or Stories found
+                      </h3>
+
+                      <p className="text-sm text-gray-500 mt-1">
+                        Check your Feature / Story JQL or try a different search.
+                      </p>
+
+                    </div>
+
+                  ) : (
+
+                    <div className="overflow-x-auto">
+
+                      <table className="w-full text-sm">
+
+                        <thead className="bg-gray-50 border-y border-gray-200">
+
+                          <tr>
+
+                            <th className="text-left px-6 py-3 font-semibold text-gray-600 whitespace-nowrap">
+                              Jira ID
+                            </th>
+
+                            <th className="text-left px-4 py-3 font-semibold text-gray-600 whitespace-nowrap">
+                              Type
+                            </th>
+
+                            <th className="text-left px-4 py-3 font-semibold text-gray-600 min-w-[300px]">
+                              Summary
+                            </th>
+
+                            <th className="text-left px-4 py-3 font-semibold text-gray-600 whitespace-nowrap">
+                              Status
+                            </th>
+
+                            <th className="text-left px-4 py-3 font-semibold text-gray-600 whitespace-nowrap">
+                              Priority
+                            </th>
+
+                            <th className="text-left px-4 py-3 font-semibold text-gray-600 whitespace-nowrap">
+                              Assignee
+                            </th>
+
+                            <th className="text-left px-4 py-3 font-semibold text-gray-600 whitespace-nowrap">
+                              Story Points
+                            </th>
+
+                            <th className="text-left px-4 py-3 font-semibold text-gray-600 whitespace-nowrap">
+                              Created
+                            </th>
+
+                            <th className="text-left px-4 py-3 font-semibold text-gray-600 whitespace-nowrap">
+                              Updated
+                            </th>
+
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
 
-                {featureTotal > 0 && featurePages > 1 && (
-                  <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
-                    <p className="text-sm text-gray-500">
-                      Page <span className="font-semibold text-gray-900">{featurePage}</span> of <span className="font-semibold text-gray-900">{featurePages}</span>
-                    </p>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setFeaturePage((page) => Math.max(1, page - 1))}
-                        disabled={featurePage === 1 || loadingFeatures}
-                        className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-                      >
-                        Previous
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setFeaturePage((page) => Math.min(featurePages, page + 1))}
-                        disabled={featurePage >= featurePages || loadingFeatures}
-                        className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-                      >
-                        Next
-                      </button>
+                        </thead>
+
+
+                        <tbody className="divide-y divide-gray-100">
+
+                          {features.map(
+                            (issue) => (
+
+                              <tr
+                                key={
+                                  issue.jira_id
+                                }
+                                className="hover:bg-gray-50"
+                              >
+
+                                <td className="px-6 py-4 whitespace-nowrap">
+
+                                  <a
+                                    href={getJiraIssueUrl(
+                                      issue.jira_id
+                                    )}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="inline-flex items-center gap-1 font-semibold text-blue-600 hover:text-blue-800"
+                                  >
+
+                                    {issue.jira_id}
+
+                                    <ExternalLink
+                                      size={13}
+                                    />
+
+                                  </a>
+
+                                </td>
+
+
+                                <td className="px-4 py-4 whitespace-nowrap">
+
+                                  <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-100 text-purple-700">
+
+                                    {issue.issue_type ||
+                                      issue.issuetype ||
+                                      "-"}
+
+                                  </span>
+
+                                </td>
+
+
+                                <td className="px-4 py-4">
+
+                                  <div
+                                    className="max-w-[420px] truncate text-gray-900"
+                                    title={
+                                      issue.summary ||
+                                      ""
+                                    }
+                                  >
+
+                                    {issue.summary ||
+                                      "-"}
+
+                                  </div>
+
+                                </td>
+
+
+                                <td className="px-4 py-4 whitespace-nowrap">
+
+                                  <span
+                                    className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${getStatusClass(
+                                      issue.status
+                                    )}`}
+                                  >
+
+                                    {issue.status ||
+                                      "-"}
+
+                                  </span>
+
+                                </td>
+
+
+                                <td className="px-4 py-4 whitespace-nowrap">
+
+                                  <span
+                                    className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${getPriorityClass(
+                                      issue.priority
+                                    )}`}
+                                  >
+
+                                    {issue.priority ||
+                                      "-"}
+
+                                  </span>
+
+                                </td>
+
+
+                                <td className="px-4 py-4 whitespace-nowrap text-gray-700">
+
+                                  {issue.assignee ||
+                                    "-"}
+
+                                </td>
+
+
+                                <td className="px-4 py-4 whitespace-nowrap text-gray-700">
+
+                                  {issue.story_points ??
+                                    "-"}
+
+                                </td>
+
+
+                                <td className="px-4 py-4 whitespace-nowrap text-gray-600">
+
+                                  {formatDate(
+                                    issue.created
+                                  )}
+
+                                </td>
+
+
+                                <td className="px-4 py-4 whitespace-nowrap text-gray-600">
+
+                                  {formatDate(
+                                    issue.updated
+                                  )}
+
+                                </td>
+
+                              </tr>
+
+                            )
+                          )}
+
+                        </tbody>
+
+                      </table>
+
                     </div>
-                  </div>
-                )}
-              </>
-            )}
+
+                  )}
+
+
+                  {/* Feature pagination */}
+
+                  {featureTotal > 0 &&
+                    featurePages > 1 && (
+
+                      <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
+
+                        <p className="text-sm text-gray-500">
+
+                          Page{" "}
+
+                          <span className="font-semibold text-gray-900">
+                            {featurePage}
+                          </span>{" "}
+
+                          of{" "}
+
+                          <span className="font-semibold text-gray-900">
+                            {featurePages}
+                          </span>
+
+                        </p>
+
+
+                        <div className="flex items-center gap-2">
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setFeaturePage(
+                                (page) =>
+                                  Math.max(
+                                    1,
+                                    page - 1
+                                  )
+                              )
+                            }
+                            disabled={
+                              featurePage ===
+                                1 ||
+                              loadingFeatures
+                            }
+                            className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                          >
+                            Previous
+                          </button>
+
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setFeaturePage(
+                                (page) =>
+                                  Math.min(
+                                    featurePages,
+                                    page + 1
+                                  )
+                              )
+                            }
+                            disabled={
+                              featurePage >=
+                                featurePages ||
+                              loadingFeatures
+                            }
+                            className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                          >
+                            Next
+                          </button>
+
+                        </div>
+
+                      </div>
+
+                    )}
+
+                </>
+
+              )}
+
           </div>
         )}
+
       </div>
+
     </div>
   );
 }
