@@ -1699,6 +1699,16 @@ def generate_project_report_html(
     # HELPERS
     # ==========================================================
 
+     jira_config = (
+        db.query(JiraConfiguration)
+        .filter(
+            JiraConfiguration.project_id
+            == project_id,
+            JiraConfiguration.active.is_(True),
+        )
+        .first()
+    )
+
     def esc(value):
         if value is None:
             return "—"
