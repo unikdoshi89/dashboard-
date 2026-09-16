@@ -1,16 +1,17 @@
-const blob = new Blob([response.data], {
-  type: "text/html",
-});
+function handleDownloadHtmlReport() {
+  if (!selectedProjectId) {
+    return;
+  }
 
-const url = window.URL.createObjectURL(blob);
+  const reportUrl =
+    `http://localhost:8000/api/projects/projects/${selectedProjectId}/report/html`;
 
-const link = document.createElement("a");
-link.href = url;
-link.download = "project-quality-report.html";
+  const link = document.createElement("a");
 
-document.body.appendChild(link);
-link.click();
+  link.href = reportUrl;
+  link.download = "quality-report.html";
 
-document.body.removeChild(link);
-
-window.URL.revokeObjectURL(url);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
