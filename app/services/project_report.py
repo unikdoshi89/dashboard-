@@ -42,6 +42,30 @@ from app.services.quality_score import (
 )
 
 
+def get_issue_environment(
+    labels,
+    uat_label=None,
+    prod_label=None,
+):
+    """
+    Determine Jira issue environment from labels.
+
+    Priority:
+    1. Production label
+    2. UAT label
+    3. SIT
+    """
+
+    labels = labels or []
+
+    if prod_label and prod_label in labels:
+        return "Production"
+
+    if uat_label and uat_label in labels:
+        return "UAT"
+
+    return "SIT"
+
 def _status_color(status):
     if not status:
         return colors.grey
