@@ -3,18 +3,6 @@ FROM metric_categories
 ORDER BY display_order;
 
 
-SELECT
-    id,
-    name,
-    metric_key,
-    category_id,
-    weight,
-    direction,
-    default_target,
-    warning_threshold,
-    critical_threshold
-FROM metric_definitions
-ORDER BY category_id, id;
 
 
 
