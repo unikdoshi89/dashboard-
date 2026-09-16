@@ -105,3 +105,16 @@ export async function getLatestAutomationUpload(
 
   return response.data;
 }
+
+export async function getProjectHtmlReport(
+  projectId
+) {
+  const response = await apiClient.get(
+    `/projects/projects/${projectId}/report/html`,
+    {
+      responseType: "text",
+    }
+  );
+
+  return response.data;
+}
