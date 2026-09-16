@@ -411,56 +411,19 @@ async function handleDownloadPdf() {
 }
 
 
-  async function handleOpenHtmlReport() {
+  function handleOpenHtmlReport() {
   if (!selectedProjectId) {
     return;
   }
 
-  try {
-    setError("");
+  const reportUrl =
+    `http://localhost:8000/api/projects/projects/${selectedProjectId}/report/html`;
 
-    const html = await getProjectHtmlReport(
-      selectedProjectId
-    );
-
-    const blob = new Blob(
-      [html],
-      {
-        type: "text/html",
-      }
-    );
-
-    const url =
-      window.URL.createObjectURL(blob);
-
-    window.open(
-      url,
-      "_blank",
-      "noopener,noreferrer"
-    );
-
-    // Keep the object URL alive long enough
-    // for the new tab to load.
-    setTimeout(() => {
-      window.URL.revokeObjectURL(url);
-    }, 60000);
-
-  } catch (err) {
-    console.error(
-      "Failed to open HTML report:",
-      err
-    );
-
-    console.error(
-      "HTML report response:",
-      err.response?.data
-    );
-
-    setError(
-      err.response?.data?.detail ||
-      "Failed to generate HTML report"
-    );
-  }
+  window.open(
+    reportUrl,
+    "_blank",
+    "noopener,noreferrer"
+  );
 }
   // ==================================================
   // Open Automation
