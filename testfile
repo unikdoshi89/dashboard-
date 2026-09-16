@@ -1,17 +1,78 @@
-function handleDownloadHtmlReport() {
-  if (!selectedProjectId) {
-    return;
-  }
+    # ==========================================================
+    # Jira Bugs
+    # ==========================================================
 
-  const reportUrl =
-    `http://localhost:8000/api/projects/projects/${selectedProjectId}/report/html`;
+    if jira_config:
+        try:
+            jira_data = await search_jira_bugs(
+                jira_url=jira_config.jira_url,
+                jira_email=jira_config.jira_email,
+                jira_api_token=jira_config.jira_api_token,
+                jql=jira_config.jql,
+            )
 
-  const link = document.createElement("a");
+            jira_issues = jira_data.get("issues") or []
 
-  link.href = reportUrl;
-  link.download = "quality-report.html";
+            print(
+                "HTML REPORT JIRA BUGS FETCHED:",
+                len(jira_issues),
+            )
 
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-}
+        except Exception as exc:
+            print(
+                "HTML report Jira bug fetch failed:",
+                repr(exc),
+            )
+
+            jira_issues = []
+
+    # ==========================================================
+    # Jira Bug Summary
+    #
+    # IMPORTANT:
+    # Classification failure must NOT delete Jira issues.
+    # ==========================================================
+
+    for issue in jira_issues:
+
+        try:
+            fields = issue.get("fields") or {}
+
+            labels = fields.get("labels") or []
+
+            environment = get_issue_environment(
+                labels=labels,
+                uat_label=jira_config.uat_label,
+                prod_label=jira_config.prod_label,
+            )
+
+            # Store environment directly on issue.
+            # This will also be available to the HTML generator.
+            issue["_environment"] = environment
+
+            if environment == "UAT":
+                jira_uat += 1
+
+            elif environment == "PROD":
+                jira_prod += 1
+
+        except Exception as exc:
+
+            print(
+                "HTML report Jira issue classification failed:",
+                repr(exc),
+                "issue:",
+                issue.get("key"),
+            )
+
+            # Keep the issue.
+            issue["_environment"] = None
+
+    jira_total = len(jira_issues)
+
+    jira_sit = max(
+        jira_total
+        - jira_uat
+        - jira_prod,
+        0,
+    )
