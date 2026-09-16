@@ -66,6 +66,7 @@ def get_issue_environment(
 
     return "SIT"
 
+
 def _status_color(status):
     if not status:
         return colors.grey
@@ -133,7 +134,7 @@ def _notes_indicate_no_data(notes):
     return any(
         phrase in notes_text
         for phrase in no_data_phrases
-    )    
+    )
 
 
 def generate_project_report_pdf(
@@ -1704,6 +1705,8 @@ def generate_project_report_html(
     if not project:
         raise ValueError("Project not found")
 
+    
+
     # ==========================================================
     # SINGLE SOURCE OF TRUTH
     # ==========================================================
@@ -2230,14 +2233,8 @@ def generate_project_report_html(
                     )}
                 </td>
                 <td>{esc(environment or "SIT")}</td>
-                <td>
-                    {esc(
-                        fields.get(
-                            "assignee",
-                            {}
-                        ).get("displayName")
-                    )}
-                </td>
+                <td> {esc( (fields.get("assignee") or {}).get("displayName") or "Unassigned" )} </td>
+
             </tr>
             """
         )
@@ -2276,14 +2273,7 @@ def generate_project_report_html(
                         ).get("name")
                     )}
                 </td>
-                <td>
-                    {esc(
-                        fields.get(
-                            "assignee",
-                            {}
-                        ).get("displayName")
-                    )}
-                </td>
+                <td> {esc( (fields.get("assignee") or {}).get("displayName") or "Unassigned" )} </td>
                 <td>
                     {esc(
                         fields.get(
