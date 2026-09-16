@@ -1,178 +1,1943 @@
-SELECT id, name, weight, display_order
-FROM metric_categories
-ORDER BY display_order;
+def generate_project_report_html(
+    db: Session,
+    project_id: int,
+    jira_total: int = 0,
+    jira_uat: int = 0,
+    jira_prod: int = 0,
+    jira_sit: int = 0,
+    jira_issues=None,
+    jira_features=None,
+):
+    """
+    Generate a complete interactive HTML report.
 
+    IMPORTANT:
+    Quality Confidence Score is ALWAYS obtained from
+    calculate_quality_confidence_score() so that the HTML report
+    uses the same calculation source as the dashboard/API/PDF.
+    """
 
+    jira_issues = jira_issues or []
+    jira_features = jira_features or []
 
+    # ==========================================================
+    # PROJECT
+    # ==========================================================
 
+    project = (
+        db.query(Project)
+        .filter(
+            Project.id == project_id,
+            Project.active.is_(True),
+        )
+        .first()
+    )
 
-qe_governance=# SELECT id, name, weight, display_order
-qe_governance-# FROM metric_categories
-qe_governance-# ORDER BY display_order;
- id |              name               | weight | display_order 
-----+---------------------------------+--------+---------------
- 10 | Coverage Indicators             |  15.00 |             1
-  7 | Test Design & Coverage          |  15.00 |             1
- 11 | Detection Capability            |  15.00 |             2
-  8 | Automation Coverage & Stability |  15.00 |             2
-  9 | Production Quality              |  15.00 |             3
- 12 | Effectiveness                   |  15.00 |             3
- 13 | Continuous Improvement          |  10.00 |             4
-(7 rows)
+    if not project:
+        raise ValueError("Project not found")
 
-qe_governance=# 
-qe_governance=# SELECT
-qe_governance-#     id,
-qe_governance-#     name,
-qe_governance-#     metric_key,
-qe_governance-#     category_id,
-qe_governance-#     weight,
-qe_governance-#     direction,
-qe_governance-#     default_target,
-qe_governance-#     warning_threshold,
-qe_governance-#     critical_threshold
-qe_governance-# FROM metric_definitions
-qe_governance-# ORDER BY category_id, id;
- id |               name                |            metric_key             | category_id | weight |    direction     | default_target | warning_threshold | critical_threshold 
-----+-----------------------------------+-----------------------------------+-------------+--------+------------------+----------------+-------------------+--------------------
- 11 | RTM Completeness                  | rtm_completeness                  |           7 |   0.00 | higher_is_better |             90 |                85 |                 80
- 12 | Negative Test Ratio               | negative_test_ratio               |           7 |   0.00 | higher_is_better |             20 |                15 |                 10
- 13 | Integration Test %                | integration_test_percentage       |           7 |   0.00 | higher_is_better |             30 |                25 |                 20      
- 14 | Risk Coverage                     | risk_coverage                     |           7 |   0.00 | higher_is_better |             90 |                80 |                 70      
- 15 | Late Test Creation Count          | late_test_creation                |           7 |   0.00 | lower_is_better  |              5 |                10 |                 15      
- 16 | QE Participation Rate             | qe_participation_rate             |           7 |   0.00 | higher_is_better |             90 |                80 |                 70      
- 17 | Automation Coverage %             | automation_coverage               |           8 |  70.00 | higher_is_better |             75 |                65 |                 50      
- 18 | Manual Regression %               | manual_regression                 |           8 |  30.00 | lower_is_better  |             25 |                35 |                 50      
- 19 | Total Prod Bugs - Last 3 Months   | prod_bugs_3_months                |           9 |  40.00 | lower_is_better  |             20 |                30 |                 40      
- 20 | Total Prod Bugs - Last 1 Month    | prod_bugs_1_month                 |           9 |  60.00 | lower_is_better  |              5 |                10 |                 15      
- 21 | Requirements → Scenario Coverage  | requirements_scenario_coverage    |          10 |  15.00 | higher_is_better |             95 |                80 |              --   60    
- 22 | Scenario → Test Case Coverage     | scenario_test_case_coverage       |          10 |  15.00 | higher_is_better |             95 |                80 |              --   60    
- 23 | Test Execution Coverage           | test_execution_coverage           |          10 |  15.00 | higher_is_better |             95 |                80 |                 60      
- 24 | SIT Flow Coverage                 | sit_flow_coverage                 |          10 |  10.00 | higher_is_better |             95 |                80 |                 60      
- 25 | API / Interface Coverage          | api_interface_coverage            |          10 |  10.00 | higher_is_better |             95 |                80 |                 60      
- 26 | UAT Business Process Coverage     | uat_business_process_coverage     |          10 |  10.00 | higher_is_better |             95 |                80 |                 60      
- 27 | Risk-Based Coverage               | risk_based_coverage               |          10 |  15.00 | higher_is_better |            100 |                85 |                 70      
- 28 | Defect Leakage from SIT           | sit_defect_leakage                |          11 |  20.00 | lower_is_better  |             10 |                20 |                 30      
- 29 | Defect Leakage from UAT           | uat_defect_leakage                |          11 |  15.00 | lower_is_better  |             10 |                20 |                 30      
- 30 | Regression Automation Detection % | regression_automation_detection   |          11 |  20.00 | higher_is_better |             80 |                60 |                 40      
- 31 | Detection per 100 Automated Tests | detection_per_100_automated_tests |          11 |  10.00 | higher_is_better |              5 |                 2 |                  1      
- 32 | High-Risk Detection %             | high_risk_detection               |          11 |  20.00 | higher_is_better |             90 |                70 |                 50      
- 33 | Missed Regression Defects         | missed_regression_defects         |          11 |  15.00 | lower_is_better  |              0 |                 2 |                  5      
- 34 | Defect Severity Mix - Late Stage  | defect_severity_mix_late_stage    |          12 |  35.00 | lower_is_better  |              5 |                10 |                 20      
- 35 | Test Case Reopen Rate             | test_case_reopen_rate             |          12 |  30.00 | lower_is_better  |              5 |                10 |                 20      
- 36 | Production Incident Volume        | production_incident_volume        |          12 |  35.00 | lower_is_better  |              0 |                 3 |                  5      
-(26 rows)
+    # ==========================================================
+    # SINGLE SOURCE OF TRUTH
+    # ==========================================================
 
+    score_data = calculate_quality_confidence_score(
+        db,
+        project_id,
+    )
 
+    overall_score = score_data.get("score")
+    overall_status = score_data.get(
+        "status",
+        "NO_DATA",
+    )
 
-import CalculationDetails from "./pages/CalculationDetails";
+    # ==========================================================
+    # HELPERS
+    # ==========================================================
 
-<Route
-  path="/calculation-details/:projectId"
-  element={<CalculationDetails />}
+    def esc(value):
+        if value is None:
+            return "—"
+
+        return escape(str(value))
+
+    def fmt_number(value, decimals=2):
+        if value is None:
+            return "—"
+
+        try:
+            return f"{float(value):.{decimals}f}"
+        except (
+            TypeError,
+            ValueError,
+        ):
+            return "—"
+
+    def status_class(status):
+        status = str(
+            status or "NO_DATA"
+        ).upper()
+
+        if status in (
+            "STRONG",
+            "GREEN",
+            "PASS",
+            "GOOD",
+        ):
+            return "status-strong"
+
+        if status in (
+            "MODERATE",
+            "AMBER",
+            "WARNING",
+        ):
+            return "status-moderate"
+
+        if status in (
+            "LOW",
+            "RED",
+            "CRITICAL",
+            "FAIL",
+        ):
+            return "status-low"
+
+        return "status-no-data"
+
+    def get_metric_display_value(
+        metric_value,
+    ):
+        if not metric_value:
+            return "NO_DATA"
+
+        value = _safe_float(
+            metric_value.value
+        )
+
+        notes = metric_value.notes
+
+        if (
+            value is None
+            or value == 0
+            or _notes_indicate_no_data(notes)
+        ):
+            return "NO_DATA"
+
+        return fmt_number(value)
+
+    # ==========================================================
+    # METRIC DATA
+    # ==========================================================
+
+    categories = (
+        db.query(MetricCategory)
+        .order_by(
+            MetricCategory.display_order
+        )
+        .all()
+    )
+
+    metric_sections = []
+
+    for category in categories:
+
+        project_metrics = (
+            db.query(
+                ProjectMetric,
+                MetricDefinition,
+                MetricValue,
+            )
+            .join(
+                MetricDefinition,
+                ProjectMetric.metric_definition_id
+                == MetricDefinition.id,
+            )
+            .outerjoin(
+                MetricValue,
+                MetricValue.project_metric_id
+                == ProjectMetric.id,
+            )
+            .filter(
+                ProjectMetric.project_id
+                == project_id,
+                ProjectMetric.enabled.is_(True),
+                MetricDefinition.category_id
+                == category.id,
+            )
+            .order_by(
+                MetricDefinition.display_order
+            )
+            .all()
+        )
+
+        if not project_metrics:
+            continue
+
+        rows = []
+
+        for (
+            project_metric,
+            definition,
+            metric_value,
+        ) in project_metrics:
+
+            value_display = (
+                get_metric_display_value(
+                    metric_value
+                )
+            )
+
+            metric_status = (
+                metric_value.status
+                if metric_value
+                and metric_value.status
+                else "NO_DATA"
+            )
+
+            notes = (
+                metric_value.notes
+                if metric_value
+                else None
+            )
+
+            if (
+                metric_value is None
+                or _safe_float(
+                    metric_value.value
+                ) in (None, 0)
+                or _notes_indicate_no_data(notes)
+            ):
+                metric_status = "NO_DATA"
+
+            rows.append(
+                f"""
+                <tr>
+                    <td>
+                        <strong>{esc(definition.name)}</strong>
+                        <div class="metric-description">
+                            {esc(definition.description)}
+                        </div>
+                    </td>
+
+                    <td>
+                        {esc(value_display)}
+                    </td>
+
+                    <td>
+                        {esc(definition.unit)}
+                    </td>
+
+                    <td>
+                        {fmt_number(definition.default_target)}
+                    </td>
+
+                    <td>
+                        {fmt_number(definition.warning_threshold)}
+                    </td>
+
+                    <td>
+                        {fmt_number(definition.critical_threshold)}
+                    </td>
+
+                    <td>
+                        <span class="status {status_class(metric_status)}">
+                            {esc(metric_status)}
+                        </span>
+                    </td>
+
+                    <td>
+                        {esc(notes)}
+                    </td>
+                </tr>
+                """
+            )
+
+        metric_sections.append(
+            f"""
+            <section class="section-card">
+                <div class="section-heading">
+                    <div>
+                        <h3>{esc(category.name)}</h3>
+                        <span class="category-weight">
+                            Category Weight:
+                            {fmt_number(category.weight)}%
+                        </span>
+                    </div>
+                </div>
+
+                <div class="table-wrapper">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Metric</th>
+                                <th>Value</th>
+                                <th>Unit</th>
+                                <th>Target</th>
+                                <th>Warning</th>
+                                <th>Critical</th>
+                                <th>Status</th>
+                                <th>Notes</th>
+                            </tr>
+                        </thead>
+
+                        <tbody>
+                            {"".join(rows)}
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+            """
+        )
+
+    # ==========================================================
+    # AUTOMATION
+    # ==========================================================
+
+    releases = (
+        db.query(AutomationRelease)
+        .filter(
+            AutomationRelease.project_id
+            == project_id
+        )
+        .order_by(
+            AutomationRelease.release_order,
+            AutomationRelease.id,
+        )
+        .all()
+    )
+
+    automation_rows = []
+
+    total_rtb = 0
+    total_test_cases = 0
+    total_automatable = 0
+    total_automated = 0
+
+    for release in releases:
+
+        details = (
+            db.query(AutomationDetail)
+            .filter(
+                AutomationDetail.release_id
+                == release.id
+            )
+            .order_by(
+                AutomationDetail.id
+            )
+            .all()
+        )
+
+        for detail in details:
+
+            automatable = (
+                detail.automatable or 0
+            )
+
+            automated = (
+                detail.automated or 0
+            )
+
+            automation_percentage = (
+                (
+                    automated
+                    / automatable
+                ) * 100
+                if automatable > 0
+                else None
+            )
+
+            automation_rows.append(
+                f"""
+                <tr>
+                    <td>{esc(release.release_name)}</td>
+                    <td>{esc(detail.pod)}</td>
+                    <td>{detail.requirements_rtb or 0}</td>
+                    <td>{detail.test_cases or 0}</td>
+                    <td>{automatable}</td>
+                    <td>{automated}</td>
+                    <td>
+                        {
+                            (
+                                f"{automation_percentage:.2f}%"
+                                if automation_percentage is not None
+                                else "—"
+                            )
+                        }
+                    </td>
+                </tr>
+                """
+            )
+
+            total_rtb += (
+                detail.requirements_rtb or 0
+            )
+
+            total_test_cases += (
+                detail.test_cases or 0
+            )
+
+            total_automatable += automatable
+            total_automated += automated
+
+    total_automation_percentage = (
+        (
+            total_automated
+            / total_automatable
+        ) * 100
+        if total_automatable > 0
+        else None
+    )
+
+    # ==========================================================
+    # RTM
+    # ==========================================================
+
+    latest_upload = (
+        db.query(AutomationUploadBatch)
+        .filter(
+            AutomationUploadBatch.project_id
+            == project_id
+        )
+        .order_by(
+            AutomationUploadBatch.uploaded_at.desc(),
+            AutomationUploadBatch.id.desc(),
+        )
+        .first()
+    )
+
+    rtm_rows = []
+
+    if latest_upload:
+
+        uploaded_test_cases = (
+            db.query(UploadedTestCase)
+            .filter(
+                UploadedTestCase.upload_batch_id
+                == latest_upload.id
+            )
+            .order_by(
+                UploadedTestCase.jira_id,
+                UploadedTestCase.id,
+            )
+            .all()
+        )
+
+        jira_summary = defaultdict(
+            lambda: {
+                "total": 0,
+                "automatable": 0,
+                "automated": 0,
+            }
+        )
+
+        for test_case in uploaded_test_cases:
+
+            jira_id = (
+                str(test_case.jira_id).strip()
+                if test_case.jira_id
+                else "NO JIRA ID"
+            )
+
+            jira_summary[jira_id][
+                "total"
+            ] += 1
+
+            if _is_yes(
+                test_case.automatable
+            ):
+                jira_summary[jira_id][
+                    "automatable"
+                ] += 1
+
+            if _is_yes(
+                test_case.automated
+            ):
+                jira_summary[jira_id][
+                    "automated"
+                ] += 1
+
+        for jira_id, summary in sorted(
+            jira_summary.items()
+        ):
+
+            total = summary["total"]
+            automatable = summary["automatable"]
+            automated = summary["automated"]
+
+            not_automated = max(
+                automatable - automated,
+                0,
+            )
+
+            percentage = (
+                (
+                    automated
+                    / automatable
+                ) * 100
+                if automatable > 0
+                else None
+            )
+
+            rtm_rows.append(
+                f"""
+                <tr>
+                    <td>{esc(jira_id)}</td>
+                    <td>{total}</td>
+                    <td>{automatable}</td>
+                    <td>{automated}</td>
+                    <td>{not_automated}</td>
+                    <td>
+                        {
+                            (
+                                f"{percentage:.2f}%"
+                                if percentage is not None
+                                else "—"
+                            )
+                        }
+                    </td>
+                </tr>
+                """
+            )
+
+    # ==========================================================
+    # JIRA ISSUES
+    # ==========================================================
+
+    jira_issue_rows = []
+
+    for issue in jira_issues:
+
+        fields = issue.get(
+            "fields",
+            {},
+        )
+
+        labels = (
+            fields.get("labels")
+            or []
+        )
+
+        environment = get_issue_environment(
+            labels=labels,
+            uat_label=(
+                jira_config.uat_label
+                if jira_config
+                else None
+            ),
+            prod_label=(
+                jira_config.prod_label
+                if jira_config
+                else None
+            ),
+        )
+
+        jira_issue_rows.append(
+            f"""
+            <tr>
+                <td>{esc(issue.get("key"))}</td>
+                <td>{esc(fields.get("summary"))}</td>
+                <td>
+                    {esc(
+                        fields.get(
+                            "status",
+                            {}
+                        ).get("name")
+                    )}
+                </td>
+                <td>
+                    {esc(
+                        fields.get(
+                            "priority",
+                            {}
+                        ).get("name")
+                    )}
+                </td>
+                <td>{esc(environment or "SIT")}</td>
+                <td>
+                    {esc(
+                        fields.get(
+                            "assignee",
+                            {}
+                        ).get("displayName")
+                    )}
+                </td>
+            </tr>
+            """
+        )
+
+    # ==========================================================
+    # JIRA FEATURES
+    # ==========================================================
+
+    jira_feature_rows = []
+
+    for issue in jira_features:
+
+        fields = issue.get(
+            "fields",
+            {},
+        )
+
+        jira_feature_rows.append(
+            f"""
+            <tr>
+                <td>{esc(issue.get("key"))}</td>
+                <td>{esc(fields.get("summary"))}</td>
+                <td>
+                    {esc(
+                        fields.get(
+                            "status",
+                            {}
+                        ).get("name")
+                    )}
+                </td>
+                <td>
+                    {esc(
+                        fields.get(
+                            "priority",
+                            {}
+                        ).get("name")
+                    )}
+                </td>
+                <td>
+                    {esc(
+                        fields.get(
+                            "assignee",
+                            {}
+                        ).get("displayName")
+                    )}
+                </td>
+                <td>
+                    {esc(
+                        fields.get(
+                            "customfield_10008"
+                        )
+                    )}
+                </td>
+            </tr>
+            """
+        )
+
+    # ==========================================================
+    # CATEGORY SCORE CARDS
+    #
+    # IMPORTANT:
+    # Scores here come directly from score_data returned by
+    # calculate_quality_confidence_score().
+    # ==========================================================
+
+    category_cards = []
+
+    for category in score_data.get(
+        "categories",
+        [],
+    ):
+
+        category_score = (
+            category.get("score")
+        )
+
+        category_status = (
+            "NO_DATA"
+            if category_score is None
+            else (
+                "STRONG"
+                if category_score >= 80
+                else (
+                    "MODERATE"
+                    if category_score >= 60
+                    else "LOW"
+                )
+            )
+        )
+
+        category_cards.append(
+            f"""
+            <div class="score-card">
+                <div class="score-card-title">
+                    {esc(category.get("category_name"))}
+                </div>
+
+                <div class="score-value">
+                    {
+                        (
+                            f"{float(category_score):.2f}"
+                            if category_score is not None
+                            else "0.00"
+                        )
+                    }
+                </div>
+
+                <div class="score-weight">
+                    Weight:
+                    {fmt_number(category.get("weight"))}%
+                </div>
+
+                <span class="status {status_class(category_status)}">
+                    {category_status}
+                </span>
+            </div>
+            """
+        )
+
+    # ==========================================================
+    # CALCULATION DETAILS
+    # ==========================================================
+
+    calculation_rows = []
+
+    for category in score_data.get(
+        "categories",
+        [],
+    ):
+
+        category_name = category.get(
+            "category_name"
+        )
+
+        category_weight = category.get(
+            "weight",
+            0,
+        )
+
+        category_score = category.get(
+            "score"
+        )
+
+        calculation_rows.append(
+            f"""
+            <tr>
+                <td>
+                    {esc(category_name)}
+                </td>
+
+                <td>
+                    {fmt_number(category_weight)}%
+                </td>
+
+                <td>
+                    {
+                        (
+                            f"{float(category_score):.2f}"
+                            if category_score is not None
+                            else "0.00"
+                        )
+                    }
+                </td>
+
+                <td>
+                    {
+                        (
+                            f"{float(category_score):.2f}"
+                            if category_score is not None
+                            else "0.00"
+                        )
+                    }
+                    ×
+                    {fmt_number(category_weight)}%
+                </td>
+            </tr>
+            """
+        )
+
+    # ==========================================================
+    # JIRA CONFIG
+    # ==========================================================
+
+    jira_config = (
+        db.query(JiraConfiguration)
+        .filter(
+            JiraConfiguration.project_id
+            == project_id,
+            JiraConfiguration.active.is_(True),
+        )
+        .first()
+    )
+
+    jira_status = (
+        "CONFIGURED"
+        if jira_config
+        else "NOT CONFIGURED"
+    )
+
+    jira_jql = (
+        jira_config.jql
+        if jira_config
+        else None
+    )
+
+    feature_jql = (
+        jira_config.feature_jql
+        if jira_config
+        else None
+    )
+
+    # ==========================================================
+    # HTML
+    # ==========================================================
+
+    score_display = (
+        f"{float(overall_score):.2f}"
+        if overall_score is not None
+        else "0.00"
+    )
+
+    generated_at = (
+        datetime.now().strftime(
+            "%d-%b-%Y %H:%M"
+        )
+    )
+
+    return f"""
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+<meta charset="UTF-8">
+
+<meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
 />
 
+<title>
+    QE Governance - {esc(project.name)}
+</title>
+
+<style>
+
+* {{
+    box-sizing: border-box;
+}}
+
+body {{
+    margin: 0;
+    background: #f8fafc;
+    color: #1e293b;
+    font-family:
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        Roboto,
+        Arial,
+        sans-serif;
+}}
+
+.header {{
+    background:
+        linear-gradient(
+            135deg,
+            #2563eb,
+            #4338ca
+        );
+    color: white;
+    padding: 28px 40px;
+}}
+
+.header-inner {{
+    max-width: 1400px;
+    margin: auto;
+}}
+
+.header h1 {{
+    margin: 0;
+    font-size: 28px;
+}}
+
+.header p {{
+    margin: 6px 0 0;
+    color: #dbeafe;
+}}
+
+.project-meta {{
+    display: flex;
+    gap: 24px;
+    margin-top: 18px;
+    font-size: 14px;
+}}
+
+.container {{
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 24px 32px 60px;
+}}
+
+.tabs {{
+    display: flex;
+    gap: 4px;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 5px;
+    margin-bottom: 24px;
+    position: sticky;
+    top: 0;
+    z-index: 20;
+}}
+
+.tab-button {{
+    border: none;
+    background: transparent;
+    padding: 12px 20px;
+    border-radius: 7px;
+    cursor: pointer;
+    color: #64748b;
+    font-size: 14px;
+    font-weight: 600;
+}}
+
+.tab-button:hover {{
+    background: #f1f5f9;
+}}
+
+.tab-button.active {{
+    background: #2563eb;
+    color: white;
+}}
+
+.tab-content {{
+    display: none;
+}}
+
+.tab-content.active {{
+    display: block;
+}}
+
+.summary-grid {{
+    display: grid;
+    grid-template-columns:
+        repeat(
+            auto-fit,
+            minmax(220px, 1fr)
+        );
+    gap: 18px;
+    margin-bottom: 24px;
+}}
+
+.summary-card {{
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 22px;
+    box-shadow:
+        0 2px 8px
+        rgba(15, 23, 42, 0.04);
+}}
+
+.summary-label {{
+    color: #64748b;
+    font-size: 13px;
+    font-weight: 600;
+}}
+
+.summary-value {{
+    margin-top: 8px;
+    font-size: 30px;
+    font-weight: 700;
+    color: #2563eb;
+}}
+
+.score-card-grid {{
+    display: grid;
+    grid-template-columns:
+        repeat(
+            auto-fit,
+            minmax(220px, 1fr)
+        );
+    gap: 16px;
+}}
+
+.score-card {{
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 20px;
+}}
+
+.score-card-title {{
+    font-weight: 600;
+    min-height: 42px;
+}}
+
+.score-value {{
+    font-size: 32px;
+    font-weight: 700;
+    color: #2563eb;
+    margin: 8px 0;
+}}
+
+.score-weight {{
+    color: #64748b;
+    font-size: 13px;
+    margin-bottom: 10px;
+}}
+
+.status {{
+    display: inline-block;
+    padding: 4px 9px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+}}
+
+.status-strong {{
+    background: #dcfce7;
+    color: #166534;
+}}
+
+.status-moderate {{
+    background: #fef3c7;
+    color: #92400e;
+}}
+
+.status-low {{
+    background: #fee2e2;
+    color: #991b1b;
+}}
+
+.status-no-data {{
+    background: #e2e8f0;
+    color: #475569;
+}}
+
+.section-card {{
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 22px;
+    margin-bottom: 20px;
+    box-shadow:
+        0 2px 8px
+        rgba(15, 23, 42, 0.04);
+}}
+
+.section-heading {{
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 18px;
+}}
+
+.section-heading h2,
+.section-heading h3 {{
+    margin: 0;
+}}
+
+.category-weight {{
+    color: #64748b;
+    font-size: 13px;
+}}
+
+.table-wrapper {{
+    overflow-x: auto;
+}}
+
+table {{
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}}
+
+th {{
+    background: #eff6ff;
+    color: #1e40af;
+    font-weight: 700;
+    text-align: left;
+}}
+
+th,
+td {{
+    border: 1px solid #e2e8f0;
+    padding: 10px;
+    vertical-align: top;
+}}
+
+tr:hover td {{
+    background: #f8fafc;
+}}
+
+.metric-description {{
+    margin-top: 4px;
+    color: #64748b;
+    font-size: 11px;
+}}
+
+.formula {{
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin: 10px 0;
+    font-family:
+        ui-monospace,
+        SFMono-Regular,
+        Menlo,
+        Consolas,
+        monospace;
+    font-size: 13px;
+    white-space: pre-wrap;
+}}
+
+.info-grid {{
+    display: grid;
+    grid-template-columns:
+        repeat(
+            auto-fit,
+            minmax(260px, 1fr)
+        );
+    gap: 16px;
+}}
+
+.info-item {{
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 14px;
+}}
+
+.info-label {{
+    color: #64748b;
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 5px;
+}}
+
+.info-value {{
+    word-break: break-word;
+}}
+
+.footer {{
+    text-align: center;
+    color: #94a3b8;
+    font-size: 12px;
+    margin-top: 40px;
+}}
+
+@media (max-width: 800px) {{
+
+    .header {{
+        padding: 22px;
+    }}
+
+    .container {{
+        padding: 16px;
+    }}
+
+    .tabs {{
+        overflow-x: auto;
+    }}
+
+    .tab-button {{
+        white-space: nowrap;
+    }}
+
+}}
+
+</style>
+
+</head>
+
+<body>
+
+<header class="header">
+
+    <div class="header-inner">
+
+        <h1>
+            QE Governance
+        </h1>
+
+        <p>
+            Quality Engineering Dashboard & Report
+        </p>
+
+        <div class="project-meta">
+
+            <span>
+                <strong>Project:</strong>
+                {esc(project.name)}
+            </span>
+
+            <span>
+                <strong>Key:</strong>
+                {esc(project.project_key)}
+            </span>
+
+            <span>
+                <strong>Generated:</strong>
+                {generated_at}
+            </span>
+
+        </div>
+
+    </div>
+
+</header>
 
 
+<div class="container">
 
-alembic revision -m "merge coverage into test design and update quality categories"
+    <!-- ======================================================
+         TABS
+         ====================================================== -->
 
+    <div class="tabs">
 
+        <button
+            class="tab-button active"
+            onclick="openTab(event, 'dashboard')"
+        >
+            Dashboard
+        </button>
 
-{
-  "jira_url": "https://hdfcbankltd.atlassian.net/",
-  "jira_email": "manish.sehgal1@hdfc.bank.in",
-  "jira_api_token": "",
-  "jql": "project = \"TPP Embedded Insurance\" and issuetype = Bug and createdDate >= 01-01-2026",
-  "feature_jql": "project = TPP Embedded Insurance and issuetype = Story",
-  "uat_label": "Insurenow_CRM",
-  "prod_label": "Production_Issues",
-  "active": true
-}
-{
-  "detail": [
-    {
-      "type": "json_invalid",
-      "loc": [
-        "body",
-        338
-      ],
-      "msg": "JSON decode error",
-      "input": {},
-      "ctx": {
-        "error": "Expecting ',' delimiter"
-      }
-    }
-  ]
-}
+        <button
+            class="tab-button"
+            onclick="openTab(event, 'automation')"
+        >
+            Automation Details
+        </button>
 
-INFO:     127.0.0.1:63274 - "GET /api/projects/6/jira/bugs HTTP/1.1" 500 Internal Server Error
-ERROR:    Exception in ASGI application
-Traceback (most recent call last):
-  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/uvicorn/protocols/http/h11_impl.py", line 416, in run_asgi
-    result = await app(  # type: ignore[func-returns-value]
-  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/uvicorn/middleware/proxy_headers.py", line 63, in __call__
-    return await self.app(scope, receive, send)
-  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/fastapi/applications.py", line 1163, in __call__
-    await super().__call__(scope, receive, send)
-  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/starlette/applications.py", line 96, in __call__
-    await self.middleware_stack(scope, receive, send)
-  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/starlette/middleware/errors.py", line 186, in __call__
-    raise exc
-  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/starlette/middleware/errors.py", line 164, in __call__
-    await self.app(scope, receive, _send)
-  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/starlette/middleware/cors.py", line 96, in __call__
-    await self.simple_response(scope, receive, send, request_headers=headers)
-  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/starlette/middleware/cors.py", line 154, in simple_response
-    await self.app(scope, receive, send)
-  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/starlette/middleware/exceptions.py", line 63, in __call__
-    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
-  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
-    raise exc
-  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
-    await app(scope, receive, sender)
-  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/fastapi/middleware/asyncexitstack.py", line 18, in __call__
-    await self.app(scope, receive, send)
-  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/starlette/routing.py", line 670, in __call__
-    await self.middleware_stack(scope, receive, send)
-  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/fastapi/routing.py", line 2734, in app
-    await route.handle(scope, receive, send)
-  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/fastapi/routing.py", line 1780, in handle
-    await self.original_router.handle(scope, receive, send)
-  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/fastapi/routing.py", line 2789, in handle
-    await included_router._handle_selected(scope, receive, send)
-  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/fastapi/routing.py", line 1791, in _handle_selected
-    await route.handle(scope, receive, send)
-  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/fastapi/routing.py", line 1780, in handle
-    await self.original_router.handle(scope, receive, send)
-  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/fastapi/routing.py", line 2789, in handle
-    await included_router._handle_selected(scope, receive, send)
-  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/fastapi/routing.py", line 1800, in _handle_selected
-    await original_route.handle(scope, receive, send)
-  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/fastapi/routing.py", line 1279, in handle
-    await app(scope, receive, send)
-  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/fastapi/routing.py", line 158, in app
-    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
-  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
-    raise exc
-  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
-    await app(scope, receive, sender)
-  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/fastapi/routing.py", line 144, in app
-    response = await f(request)
-  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/fastapi/routing.py", line 706, in app
-    raw_response = await run_endpoint_function(
-  File "/Users/u2515/code/dashboard-backend/venv/lib/python3.10/site-packages/fastapi/routing.py", line 352, in run_endpoint_function
-    return await dependant.call(**values)
-  File "/Users/u2515/code/dashboard-backend/app/api/routes/jira.py", line 752, in get_jira_bugs
-    "total": total,
-UnboundLocalError: local variable 'total' referenced before assignment
+        <button
+            class="tab-button"
+            onclick="openTab(event, 'jira')"
+        >
+            Jira Details
+        </button>
+
+        <button
+            class="tab-button"
+            onclick="openTab(event, 'calculation')"
+        >
+            Calculation Details
+        </button>
+
+    </div>
 
 
-Unable to fetch Jira features: Jira API failed: 400 - {"errorMessages":["Error in the JQL Query: Expecting either 'OR' or 'AND' but got 'Embedded'. (line 1, character 15)"],"errors":{}}
+    <!-- ======================================================
+         DASHBOARD
+         ====================================================== -->
+
+    <div
+        id="dashboard"
+        class="tab-content active"
+    >
+
+        <div class="summary-grid">
+
+            <div class="summary-card">
+
+                <div class="summary-label">
+                    Quality Confidence Score
+                </div>
+
+                <div class="summary-value">
+                    {score_display}
+                </div>
+
+                <span class="status {status_class(overall_status)}">
+                    {esc(overall_status)}
+                </span>
+
+            </div>
 
 
+            <div class="summary-card">
+
+                <div class="summary-label">
+                    Jira Total Bugs
+                </div>
+
+                <div class="summary-value">
+                    {jira_total}
+                </div>
+
+            </div>
 
 
+            <div class="summary-card">
+
+                <div class="summary-label">
+                    Production Bugs
+                </div>
+
+                <div class="summary-value">
+                    {jira_prod}
+                </div>
+
+            </div>
 
 
+            <div class="summary-card">
 
+                <div class="summary-label">
+                    UAT Bugs
+                </div>
+
+                <div class="summary-value">
+                    {jira_uat}
+                </div>
+
+            </div>
+
+
+            <div class="summary-card">
+
+                <div class="summary-label">
+                    SIT Bugs
+                </div>
+
+                <div class="summary-value">
+                    {jira_sit}
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <section class="section-card">
+
+            <div class="section-heading">
+
+                <h2>
+                    Quality Category Summary
+                </h2>
+
+            </div>
+
+            <div class="score-card-grid">
+
+                {"".join(category_cards)}
+
+            </div>
+
+        </section>
+
+
+        {"".join(metric_sections)}
+
+    </div>
+
+
+    <!-- ======================================================
+         AUTOMATION
+         ====================================================== -->
+
+    <div
+        id="automation"
+        class="tab-content"
+    >
+
+        <section class="section-card">
+
+            <div class="section-heading">
+
+                <h2>
+                    Automation Summary
+                </h2>
+
+            </div>
+
+            <div class="summary-grid">
+
+                <div class="summary-card">
+                    <div class="summary-label">
+                        Total Test Cases
+                    </div>
+                    <div class="summary-value">
+                        {total_test_cases}
+                    </div>
+                </div>
+
+                <div class="summary-card">
+                    <div class="summary-label">
+                        Automatable
+                    </div>
+                    <div class="summary-value">
+                        {total_automatable}
+                    </div>
+                </div>
+
+                <div class="summary-card">
+                    <div class="summary-label">
+                        Automated
+                    </div>
+                    <div class="summary-value">
+                        {total_automated}
+                    </div>
+                </div>
+
+                <div class="summary-card">
+                    <div class="summary-label">
+                        Automation %
+                    </div>
+                    <div class="summary-value">
+                        {
+                            (
+                                f"{total_automation_percentage:.2f}%"
+                                if total_automation_percentage is not None
+                                else "—"
+                            )
+                        }
+                    </div>
+                </div>
+
+            </div>
+
+        </section>
+
+
+        <section class="section-card">
+
+            <div class="section-heading">
+
+                <h2>
+                    Release Automation Details
+                </h2>
+
+            </div>
+
+            <div class="table-wrapper">
+
+                <table>
+
+                    <thead>
+
+                        <tr>
+                            <th>Release</th>
+                            <th>POD</th>
+                            <th>Requirements + RTB</th>
+                            <th>Test Cases</th>
+                            <th>Automatable</th>
+                            <th>Automated</th>
+                            <th>Automation %</th>
+                        </tr>
+
+                    </thead>
+
+                    <tbody>
+
+                        {
+                            "".join(
+                                automation_rows
+                            )
+                            if automation_rows
+                            else
+                            '''
+                            <tr>
+                                <td colspan="7">
+                                    No automation data available.
+                                </td>
+                            </tr>
+                            '''
+                        }
+
+                    </tbody>
+
+                </table>
+
+            </div>
+
+        </section>
+
+
+        <section class="section-card">
+
+            <div class="section-heading">
+
+                <h2>
+                    RTM & Automation Summary
+                </h2>
+
+            </div>
+
+            <div class="table-wrapper">
+
+                <table>
+
+                    <thead>
+
+                        <tr>
+                            <th>Jira ID</th>
+                            <th>Test Cases</th>
+                            <th>Automatable</th>
+                            <th>Automated</th>
+                            <th>Not Automated</th>
+                            <th>Automation %</th>
+                        </tr>
+
+                    </thead>
+
+                    <tbody>
+
+                        {
+                            "".join(
+                                rtm_rows
+                            )
+                            if rtm_rows
+                            else
+                            '''
+                            <tr>
+                                <td colspan="6">
+                                    No RTM data available.
+                                </td>
+                            </tr>
+                            '''
+                        }
+
+                    </tbody>
+
+                </table>
+
+            </div>
+
+        </section>
+
+    </div>
+
+
+    <!-- ======================================================
+         JIRA
+         ====================================================== -->
+
+    <div
+        id="jira"
+        class="tab-content"
+    >
+
+        <section class="section-card">
+
+            <div class="section-heading">
+
+                <h2>
+                    Jira Configuration
+                </h2>
+
+            </div>
+
+            <div class="info-grid">
+
+                <div class="info-item">
+
+                    <div class="info-label">
+                        Configuration
+                    </div>
+
+                    <div class="info-value">
+                        {jira_status}
+                    </div>
+
+                </div>
+
+
+                <div class="info-item">
+
+                    <div class="info-label">
+                        Bug JQL
+                    </div>
+
+                    <div class="info-value">
+                        {esc(jira_jql)}
+                    </div>
+
+                </div>
+
+
+                <div class="info-item">
+
+                    <div class="info-label">
+                        Feature / Story JQL
+                    </div>
+
+                    <div class="info-value">
+                        {esc(feature_jql)}
+                    </div>
+
+                </div>
+
+            </div>
+
+        </section>
+
+
+        <section class="section-card">
+
+            <div class="section-heading">
+
+                <h2>
+                    Jira Bug Details
+                </h2>
+
+            </div>
+
+            <div class="table-wrapper">
+
+                <table>
+
+                    <thead>
+
+                        <tr>
+                            <th>Jira ID</th>
+                            <th>Summary</th>
+                            <th>Status</th>
+                            <th>Priority</th>
+                            <th>Environment</th>
+                            <th>Assignee</th>
+                        </tr>
+
+                    </thead>
+
+                    <tbody>
+
+                        {
+                            "".join(
+                                jira_issue_rows
+                            )
+                            if jira_issue_rows
+                            else
+                            '''
+                            <tr>
+                                <td colspan="6">
+                                    No Jira bugs available.
+                                </td>
+                            </tr>
+                            '''
+                        }
+
+                    </tbody>
+
+                </table>
+
+            </div>
+
+        </section>
+
+
+        <section class="section-card">
+
+            <div class="section-heading">
+
+                <h2>
+                    Jira Features / Stories
+                </h2>
+
+            </div>
+
+            <div class="table-wrapper">
+
+                <table>
+
+                    <thead>
+
+                        <tr>
+                            <th>Jira ID</th>
+                            <th>Summary</th>
+                            <th>Status</th>
+                            <th>Priority</th>
+                            <th>Assignee</th>
+                            <th>Story Points</th>
+                        </tr>
+
+                    </thead>
+
+                    <tbody>
+
+                        {
+                            "".join(
+                                jira_feature_rows
+                            )
+                            if jira_feature_rows
+                            else
+                            '''
+                            <tr>
+                                <td colspan="6">
+                                    No Jira features/stories available.
+                                </td>
+                            </tr>
+                            '''
+                        }
+
+                    </tbody>
+
+                </table>
+
+            </div>
+
+        </section>
+
+    </div>
+
+
+    <!-- ======================================================
+         CALCULATION
+         ====================================================== -->
+
+    <div
+        id="calculation"
+        class="tab-content"
+    >
+
+        <section class="section-card">
+
+            <div class="section-heading">
+
+                <h2>
+                    Quality Confidence Score
+                </h2>
+
+            </div>
+
+            <div class="summary-grid">
+
+                <div class="summary-card">
+
+                    <div class="summary-label">
+                        Overall Score
+                    </div>
+
+                    <div class="summary-value">
+                        {score_display}
+                    </div>
+
+                </div>
+
+                <div class="summary-card">
+
+                    <div class="summary-label">
+                        Status
+                    </div>
+
+                    <div style="margin-top:12px">
+                        <span class="status {status_class(overall_status)}">
+                            {esc(overall_status)}
+                        </span>
+                    </div>
+
+                </div>
+
+            </div>
+
+        </section>
+
+
+        <section class="section-card">
+
+            <div class="section-heading">
+
+                <h2>
+                    Calculation Logic
+                </h2>
+
+            </div>
+
+            <h3>
+                Higher Is Better
+            </h3>
+
+            <div class="formula">
+If value >= target:
+    Score = 100
+
+If warning <= value < target:
+    Score = 75 + ((value - warning) / (target - warning)) × 25
+
+If critical <= value < warning:
+    Score = 40 + ((value - critical) / (warning - critical)) × 35
+
+If value < critical:
+    Score = (value / critical) × 40
+            </div>
+
+
+            <h3>
+                Lower Is Better
+            </h3>
+
+            <div class="formula">
+If value <= target:
+    Score = 100
+
+If target < value <= warning:
+    Score = 75 + ((warning - value) / (warning - target)) × 25
+
+If warning < value <= critical:
+    Score = 40 + ((critical - value) / (critical - warning)) × 35
+
+If value > critical:
+    Score = 0
+            </div>
+
+
+            <h3>
+                Automation Coverage
+            </h3>
+
+            <div class="formula">
+Automation Coverage Score = Actual Automation Percentage
+
+Example:
+86% automation → 86 score
+75% automation → 75 score
+100% automation → 100 score
+            </div>
+
+
+            <h3>
+                Missing Data
+            </h3>
+
+            <div class="formula">
+Missing metric value = 0 score
+
+The metric weight is still included.
+
+Missing category data = 0 score
+
+The category weight is still included.
+
+Example:
+
+Category score = 73
+Category weight = 30%
+
+Contribution = 73 × 30%
+             = 21.90
+
+Therefore:
+Overall Score contribution = 21.90
+            </div>
+
+        </section>
+
+
+        <section class="section-card">
+
+            <div class="section-heading">
+
+                <h2>
+                    Category Calculation
+                </h2>
+
+            </div>
+
+            <div class="table-wrapper">
+
+                <table>
+
+                    <thead>
+
+                        <tr>
+                            <th>Category</th>
+                            <th>Weight</th>
+                            <th>Category Score</th>
+                            <th>Weighted Contribution</th>
+                        </tr>
+
+                    </thead>
+
+                    <tbody>
+
+                        {"".join(calculation_rows)}
+
+                    </tbody>
+
+                </table>
+
+            </div>
+
+        </section>
+
+
+        <section class="section-card">
+
+            <div class="section-heading">
+
+                <h2>
+                    Overall Calculation
+                </h2>
+
+            </div>
+
+            <div class="formula">
+Overall Score =
+    Σ(Category Score × Category Weight)
+    ------------------------------------
+             Σ(Category Weight)
+
+The values displayed above are returned directly from:
+
+calculate_quality_confidence_score(
+    db,
+    project_id
+)
+
+The HTML report does not calculate or override
+the Quality Confidence Score.
+            </div>
+
+        </section>
+
+    </div>
+
+
+    <div class="footer">
+
+        QE Governance —
+        Generated {generated_at}
+
+    </div>
+
+</div>
+
+
+<script>
+
+function openTab(event, tabId) {{
+
+    const contents =
+        document.querySelectorAll(
+            ".tab-content"
+        );
+
+    contents.forEach(
+        function(content) {{
+            content.classList.remove(
+                "active"
+            );
+        }}
+    );
+
+    const buttons =
+        document.querySelectorAll(
+            ".tab-button"
+        );
+
+    buttons.forEach(
+        function(button) {{
+            button.classList.remove(
+                "active"
+            );
+        }}
+    );
+
+    document
+        .getElementById(tabId)
+        .classList.add("active");
+
+    event.currentTarget
+        .classList.add("active");
+
+    window.scrollTo(
+        {{
+            top: 0,
+            behavior: "smooth"
+        }}
+    );
+}}
+
+</script>
+
+</body>
+</html>
+"""
