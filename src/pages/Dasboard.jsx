@@ -424,17 +424,24 @@ async function handleDownloadPdf() {
         selectedProjectId
       );
 
-    const blob = new Blob(
-      [html],
-      {
-        type: "text/html",
-      }
-    );
+    const blob = new Blob([response.data], {
+  type: "text/html",
+});
 
-    const url =
-      window.URL.createObjectURL(
-        blob
-      );
+const url = window.URL.createObjectURL(blob);
+
+const link = document.createElement("a");
+link.href = url;
+link.download = "project-quality-report.html";
+
+document.body.appendChild(link);
+link.click();
+
+document.body.removeChild(link);
+
+window.URL.revokeObjectURL(url);
+
+    
 
     window.open(
       url,
