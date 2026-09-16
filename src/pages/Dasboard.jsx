@@ -30,6 +30,7 @@ import {
   addMetric,
   getQualityScore,
   downloadProjectPdf,
+  getProjectHtmlReport,
 } from "../api/projects";
 
 import {
@@ -405,6 +406,60 @@ async function handleDownloadPdf() {
     setError(
       err.response?.data?.detail ||
       "Failed to generate PDF"
+    );
+  }
+}
+
+
+  async function handleOpenHtmlReport() {
+  if (!selectedProjectId) {
+    return;
+  }
+
+  try {
+    setError("");
+
+    const html =
+      await getProjectHtmlReport(
+        selectedProjectId
+      );
+
+    const blob = new Blob(
+      [html],
+      {
+        type: "text/html",
+      }
+    );
+
+    const url =
+      window.URL.createObjectURL(
+        blob
+      );
+
+    window.open(
+      url,
+      "_blank",
+      "noopener,noreferrer"
+    );
+
+    // Give the new tab time to load
+    // before releasing the object URL.
+    setTimeout(() => {
+      window.URL.revokeObjectURL(
+        url
+      );
+    }, 60000);
+
+  } catch (err) {
+
+    console.error(
+      "Failed to open HTML report:",
+      err
+    );
+
+    setError(
+      err.response?.data?.detail ||
+      "Failed to generate HTML report"
     );
   }
 }
