@@ -740,6 +740,17 @@ useEffect(() => {
         Calculation Details
       </button>
 
+      <button
+  type="button"
+  onClick={() => {
+    setShowDetailsMenu(false);
+    handleOpenHtmlReport();
+  }}
+  className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50"
+>
+  HTML Report
+</button>
+
     </div>
   )}
 
