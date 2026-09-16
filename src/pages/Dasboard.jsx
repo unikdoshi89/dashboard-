@@ -37,6 +37,8 @@ import {
   updateMetricValue,
 } from "../api/metrics";
 
+import { downloadProjectHtml, } from "../api/projects";
+
 
 import ProjectSelector from "../components/ProjectSelector";
 import AddProjectModal from "../components/AddProjectModal";
@@ -425,6 +427,40 @@ async function handleDownloadPdf() {
     "noopener,noreferrer"
   );
 }
+
+
+const handleDownloadHtmlReport = async () => {
+  try {
+    const blob = await downloadProjectHtml(projectId);
+
+    const url = window.URL.createObjectURL(
+      new Blob([blob], {
+        type: "text/html",
+      })
+    );
+
+    const link = document.createElement("a");
+
+    link.href = url;
+    link.download = `project_${projectId}_report.html`;
+
+    document.body.appendChild(link);
+
+    link.click();
+
+    document.body.removeChild(link);
+
+    window.URL.revokeObjectURL(url);
+
+  } catch (error) {
+    console.error(
+      "Failed to download HTML report:",
+      error
+    );
+
+    alert("Failed to download HTML report");
+  }
+};
   // ==================================================
   // Open Automation
   // ==================================================
@@ -703,10 +739,7 @@ useEffect(() => {
 
       <button
   type="button"
-  onClick={() => {
-    setShowDetailsMenu(false);
-    handleOpenHtmlReport();
-  }}
+  onClick={() => {handleDownloadHtmlReport}}
   className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50"
 >
   HTML Report
