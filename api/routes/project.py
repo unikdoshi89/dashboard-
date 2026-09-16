@@ -23,7 +23,10 @@ from app.models.metric_category import MetricCategory
 from app.models.project_metric import ProjectMetric
 from app.models.metric_definition import MetricDefinition
 from app.models.jira_configuration import JiraConfiguration
-from app.services.jira_service import search_jira_bugs
+from app.services.jira_service import (
+    search_jira_bugs,
+    search_jira_features,
+)
 
 from app.utils.status_calculator import calculate_status
 
@@ -38,9 +41,13 @@ AutomationUploadBatch,
 UploadedTestCase,
 )
 
-from fastapi.responses import StreamingResponse
+from fastapi.responses import (
+    StreamingResponse,
+    HTMLResponse,
+)
 from app.services.project_report import (
     generate_project_report_pdf,
+    generate_project_report_html,
 )
 
 from app.services.quality_score import (
@@ -525,6 +532,235 @@ async def download_project_report(
             "Content-Disposition":
                 f'attachment; filename="{filename}"'
         },
+    )
+
+@router.get(
+    "/projects/{project_id}/report/html",
+    response_class=HTMLResponse,
+)
+async def project_html_report(
+    project_id: int,
+    db: Session = Depends(get_db),
+):
+    # ==========================================================
+    # Validate Project
+    # ==========================================================
+
+    project = (
+        db.query(Project)
+        .filter(
+            Project.id == project_id,
+            Project.active.is_(True),
+        )
+        .first()
+    )
+
+    if not project:
+        raise HTTPException(
+            status_code=404,
+            detail="Project not found",
+        )
+
+    # ==========================================================
+    # Jira defaults
+    # ==========================================================
+
+    jira_total = 0
+    jira_uat = 0
+    jira_prod = 0
+    jira_sit = 0
+
+    jira_issues = []
+    jira_features = []
+
+    jira_config = (
+        db.query(JiraConfiguration)
+        .filter(
+            JiraConfiguration.project_id == project_id,
+            JiraConfiguration.active.is_(True),
+        )
+        .first()
+    )
+
+    # ==========================================================
+    # Jira Bugs
+    # ==========================================================
+
+    if jira_config:
+
+        try:
+
+            jira_data = await search_jira_bugs(
+                jira_url=jira_config.jira_url,
+                jira_email=jira_config.jira_email,
+                jira_api_token=jira_config.jira_api_token,
+                jql=jira_config.jql,
+            )
+
+            jira_issues = jira_data.get(
+                "issues",
+                [],
+            )
+
+            jira_total = len(
+                jira_issues
+            )
+
+            for issue in jira_issues:
+
+                fields = issue.get(
+                    "fields",
+                    {},
+                )
+
+                labels = (
+                    fields.get(
+                        "labels"
+                    )
+                    or []
+                )
+
+                environment = (
+                    get_issue_environment(
+                        labels=labels,
+                        uat_label=(
+                            jira_config.uat_label
+                        ),
+                        prod_label=(
+                            jira_config.prod_label
+                        ),
+                    )
+                )
+
+                if environment == "UAT":
+
+                    jira_uat += 1
+
+                elif environment == "PROD":
+
+                    jira_prod += 1
+
+            jira_sit = max(
+                jira_total
+                - jira_uat
+                - jira_prod,
+                0,
+            )
+
+        except Exception as exc:
+
+            print(
+                "HTML report Jira bug fetch failed:",
+                exc,
+            )
+
+            # Do not fail the complete report.
+            jira_total = 0
+            jira_uat = 0
+            jira_prod = 0
+            jira_sit = 0
+            jira_issues = []
+
+    # ==========================================================
+    # Jira Features / Stories
+    # ==========================================================
+
+    if jira_config:
+
+        feature_jql = (
+            jira_config.feature_jql
+            or ""
+        ).strip()
+
+        if feature_jql:
+
+            try:
+
+                feature_data = (
+                    await search_jira_features(
+                        jira_url=(
+                            jira_config.jira_url
+                        ),
+                        jira_email=(
+                            jira_config.jira_email
+                        ),
+                        jira_api_token=(
+                            jira_config.jira_api_token
+                        ),
+                        jql=feature_jql,
+                    )
+                )
+
+                jira_features = (
+                    feature_data.get(
+                        "issues",
+                        [],
+                    )
+                )
+
+            except Exception as exc:
+
+                print(
+                    "HTML report Jira feature fetch failed:",
+                    exc,
+                )
+
+                jira_features = []
+
+    # ==========================================================
+    # Generate HTML
+    # ==========================================================
+
+    try:
+
+        html = generate_project_report_html(
+            db=db,
+            project_id=project_id,
+            jira_total=jira_total,
+            jira_uat=jira_uat,
+            jira_prod=jira_prod,
+            jira_sit=jira_sit,
+            jira_issues=jira_issues,
+            jira_features=jira_features,
+        )
+
+    except Exception as exc:
+
+        import traceback
+
+        print(
+            "========================================"
+        )
+
+        print(
+            "HTML REPORT GENERATION FAILED"
+        )
+
+        print(
+            "========================================"
+        )
+
+        print(
+            str(exc)
+        )
+
+        traceback.print_exc()
+
+        print(
+            "========================================"
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "Failed to generate project HTML report: "
+                f"{str(exc)}"
+            ),
+        )
+
+    return HTMLResponse(
+        content=html,
+        status_code=200,
     )
 
 @router.post(
