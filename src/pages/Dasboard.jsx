@@ -419,29 +419,19 @@ async function handleDownloadPdf() {
   try {
     setError("");
 
-    const html =
-      await getProjectHtmlReport(
-        selectedProjectId
-      );
+    const html = await getProjectHtmlReport(
+      selectedProjectId
+    );
 
-    const blob = new Blob([response.data], {
-  type: "text/html",
-});
+    const blob = new Blob(
+      [html],
+      {
+        type: "text/html",
+      }
+    );
 
-const url = window.URL.createObjectURL(blob);
-
-const link = document.createElement("a");
-link.href = url;
-link.download = "project-quality-report.html";
-
-document.body.appendChild(link);
-link.click();
-
-document.body.removeChild(link);
-
-window.URL.revokeObjectURL(url);
-
-    
+    const url =
+      window.URL.createObjectURL(blob);
 
     window.open(
       url,
@@ -449,19 +439,21 @@ window.URL.revokeObjectURL(url);
       "noopener,noreferrer"
     );
 
-    // Give the new tab time to load
-    // before releasing the object URL.
+    // Keep the object URL alive long enough
+    // for the new tab to load.
     setTimeout(() => {
-      window.URL.revokeObjectURL(
-        url
-      );
+      window.URL.revokeObjectURL(url);
     }, 60000);
 
   } catch (err) {
-
     console.error(
       "Failed to open HTML report:",
       err
+    );
+
+    console.error(
+      "HTML report response:",
+      err.response?.data
     );
 
     setError(
@@ -470,7 +462,6 @@ window.URL.revokeObjectURL(url);
     );
   }
 }
-
   // ==================================================
   // Open Automation
   // ==================================================
