@@ -1699,7 +1699,7 @@ def generate_project_report_html(
     # HELPERS
     # ==========================================================
 
-     jira_config = (
+    jira_config = (
         db.query(JiraConfiguration)
         .filter(
             JiraConfiguration.project_id
