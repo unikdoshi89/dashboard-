@@ -76,3 +76,14 @@
         - jira_prod,
         0,
     )
+
+
+
+
+Metric	Value	Unit	Target	Warning	Critical	Status	Notes
+Total Prod Bugs - Last 3 Months
+Production bugs created during the last three months.
+8.00	count	20.00	30.00	40.00	healthy	
+Total Prod Bugs - Last 1 Month
+Production bugs created during the last month.
+3.00	count	5.00	10.00	15.00	healthy	
