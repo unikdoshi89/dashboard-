@@ -1,3 +1,4 @@
+```python
 import httpx
 
 
@@ -78,20 +79,20 @@ async def search_jira_bugs(
             payload = {
                 "jql": jql,
                 "maxResults": max_results,
-                fields = [
-    "summary",
-    "status",
-    "priority",
-    "assignee",
-    "reporter",
-    "created",
-    "updated",
-    "labels",
-]
-
-if environment_field:
-    fields.append(environment_field),
+                "fields": [
+                    "summary",
+                    "status",
+                    "priority",
+                    "assignee",
+                    "reporter",
+                    "created",
+                    "updated",
+                    "labels",
+                ],
             }
+
+            if environment_field:
+                fields.append(environment_field)
 
             # Add pagination token only after first request
             if next_page_token:
@@ -168,21 +169,21 @@ async def search_jira_features(
             payload = {
                 "jql": jql,
                 "maxResults": max_results,
-               fields = [
-    "summary",
-    "status",
-    "priority",
-    "assignee",
-    "reporter",
-    "created",
-    "updated",
-    "labels",
-    "parent",
-]
-
-if environment_field:
-    fields.append(environment_field),
+                "fields": [
+                    "summary",
+                    "status",
+                    "priority",
+                    "assignee",
+                    "reporter",
+                    "created",
+                    "updated",
+                    "labels",
+                    "parent",
+                ],
             }
+
+            if environment_field:
+                fields.append(environment_field)
 
             # Add pagination token only after first request
             if next_page_token:
@@ -226,6 +227,7 @@ if environment_field:
         "issues": all_features,
         "total": len(all_features),
     }
+
 
 def get_issue_environment(
     fields,
@@ -311,3 +313,4 @@ def get_issue_environment(
         return "PROD"
 
     return None
+```
