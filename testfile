@@ -88,3 +88,18 @@ WHERE metric_key IN (
     'prod_bugs_3_months',
     'prod_bugs_1_month'
 );
+
+
+
+SELECT
+    id,
+    name,
+    default_target,
+    warning_threshold,
+    critical_threshold,
+    direction
+FROM metric_definitions
+WHERE metric_key IN (
+    'prod_bugs_3_months',
+    'prod_bugs_1_month'
+);
