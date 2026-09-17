@@ -467,7 +467,6 @@ async def test_project_jira_connection(
 # ============================================================
 # GET Jira Bugs
 # ============================================================
-
 @router.get(
     "/{project_id}/jira/bugs",
 )
@@ -481,18 +480,16 @@ async def get_jira_bugs(
     """
     Get Jira bugs for a project.
 
-    The project's configured JQL is used as
-    the base query.
+    Environment detection priority:
+    1. Project-specific Jira environment field
+    2. Project-specific UAT label
+    3. Project-specific PROD label
 
-    Optional search:
-        Jira ID:
-            ABC-123
+    The environment field is project-specific, for example:
 
-        Keyword:
-            login
-
-    Issues are classified using the
-    project-specific UAT and Production labels.
+        Project A -> ENV_IOP
+        Project B -> ENVIRONMENT
+        Project C -> customfield_12345
     """
 
     # ========================================================
@@ -524,8 +521,6 @@ async def get_jira_bugs(
         .first()
     )
 
-
-    # Jira is not configured
     if not config:
         return {
             "configured": False,
@@ -568,26 +563,32 @@ async def get_jira_bugs(
         )
 
     # ========================================================
-    # 4. Validate environment labels
+    # 4. Environment configuration
+    #
+    # Environment field is optional because labels are still
+    # supported as fallback.
     # ========================================================
 
-    if not config.uat_label or not config.uat_label.strip():
-        raise HTTPException(
-            status_code=500,
-            detail=(
-                "UAT issue label is not configured "
-                "for this project."
-            ),
+    environment_field = (
+        getattr(
+            config,
+            "environment_field",
+            None,
         )
+        or ""
+    ).strip()
 
-    if not config.prod_label or not config.prod_label.strip():
-        raise HTTPException(
-            status_code=500,
-            detail=(
-                "Production issue label is not configured "
-                "for this project."
-            ),
-        )
+    uat_label = (
+        config.uat_label.strip()
+        if config.uat_label
+        else None
+    )
+
+    prod_label = (
+        config.prod_label.strip()
+        if config.prod_label
+        else None
+    )
 
     # ========================================================
     # 5. Build JQL
@@ -604,13 +605,13 @@ async def get_jira_bugs(
 
     try:
 
-        result = await search_jira_bugs(
-    jira_url=config.jira_url,
-    jira_email=config.jira_email,
-    jira_api_token=config.jira_api_token,
-    jql=config.jql,
-    environment_field=config.environment_field,
-)
+        jira_data = await search_jira_bugs(
+            jira_url=config.jira_url,
+            jira_email=config.jira_email,
+            jira_api_token=config.jira_api_token,
+            jql=jql,
+            environment_field=environment_field or None,
+        )
 
     except Exception as exc:
 
@@ -633,45 +634,66 @@ async def get_jira_bugs(
     # 8. Process Jira issues
     # ========================================================
 
-    for issue in jira_data.get("issues", []):
+    for issue in jira_data.get(
+        "issues",
+        [],
+    ):
 
         fields = issue.get(
             "fields",
             {},
+        ) or {}
+
+        labels = (
+            fields.get("labels")
+            or []
         )
 
         # ----------------------------------------------------
-        # Jira labels
-        # ----------------------------------------------------
-
-        labels = fields.get("labels") or []
-
-        # ----------------------------------------------------
         # Determine environment
+        #
+        # Priority:
+        # ENV field -> UAT label -> PROD label
         # ----------------------------------------------------
 
         environment = get_issue_environment(
-          fields=fields,
-          environment_field=config.environment_field,
-          uat_label=config.uat_label,
-          prod_label=config.prod_label,
+            fields=fields,
+            environment_field=(
+                environment_field
+                or None
+            ),
+            uat_label=uat_label,
+            prod_label=prod_label,
         )
 
         # ----------------------------------------------------
         # Jira objects
         # ----------------------------------------------------
 
-        assignee = fields.get("assignee")
-        reporter = fields.get("reporter")
-        status = fields.get("status")
-        priority = fields.get("priority")
+        assignee = fields.get(
+            "assignee"
+        )
+
+        reporter = fields.get(
+            "reporter"
+        )
+
+        status = fields.get(
+            "status"
+        )
+
+        priority = fields.get(
+            "priority"
+        )
 
         # ----------------------------------------------------
         # Create normalized bug object
         # ----------------------------------------------------
 
         bug = {
-            "jira_id": issue.get("key"),
+            "jira_id": issue.get(
+                "key"
+            ),
 
             "summary": fields.get(
                 "summary"
@@ -679,25 +701,41 @@ async def get_jira_bugs(
 
             "status": (
                 status.get("name")
-                if status
+                if isinstance(
+                    status,
+                    dict,
+                )
                 else None
             ),
 
             "priority": (
                 priority.get("name")
-                if priority
+                if isinstance(
+                    priority,
+                    dict,
+                )
                 else None
             ),
 
             "assignee": (
-                assignee.get("displayName")
-                if assignee
+                assignee.get(
+                    "displayName"
+                )
+                if isinstance(
+                    assignee,
+                    dict,
+                )
                 else None
             ),
 
             "reporter": (
-                reporter.get("displayName")
-                if reporter
+                reporter.get(
+                    "displayName"
+                )
+                if isinstance(
+                    reporter,
+                    dict,
+                )
                 else None
             ),
 
@@ -726,85 +764,92 @@ async def get_jira_bugs(
 
         if environment == "UAT":
 
-            uat_bugs.append(bug)
+            uat_bugs.append(
+                bug
+            )
 
         elif environment == "PROD":
 
-            prod_bugs.append(bug)
+            prod_bugs.append(
+                bug
+            )
 
     # ========================================================
-    # 9. Return response
+    # 9. Pagination
     # ========================================================
-        # Pagination
+
     total = len(bugs)
-    start = (page - 1) * per_page
-    end = start + per_page
 
-    paged_bugs = bugs[start:end]
-    paged_uat = uat_bugs[start:end]
-    paged_prod = prod_bugs[start:end]
+    start = (
+        page - 1
+    ) * per_page
+
+    end = (
+        start + per_page
+    )
+
+    paged_bugs = bugs[
+        start:end
+    ]
+
+    # IMPORTANT:
+    # These lists are independently filtered by environment.
+    # We retain the existing behavior of your application.
+    paged_uat = uat_bugs[
+        start:end
+    ]
+
+    paged_prod = prod_bugs[
+        start:end
+    ]
+
+    # ========================================================
+    # 10. Response
+    # ========================================================
+
     return {
-    "jira_id": issue.get("key"),
-    "summary": fields.get("summary"),
-    "status": (
-        fields.get("status", {}).get("name")
-        if fields.get("status")
-        else None
-    ),
-    "priority": (
-        fields.get("priority", {}).get("name")
-        if fields.get("priority")
-        else None
-    ),
-    "assignee": (
-        fields.get("assignee", {}).get("displayName")
-        if fields.get("assignee")
-        else None
-    ),
-    "reporter": (
-        fields.get("reporter", {}).get("displayName")
-        if fields.get("reporter")
-        else None
-    ),
-    "created": fields.get("created"),
-    "updated": fields.get("updated"),
-    "environment": environment,
-    "labels": fields.get("labels") or [],
-    }
+        "configured": True,
 
-# def get_issue_environment(
-#     labels,
-#     uat_label,
-#     prod_label,
-# ):
-#     """
-#     Determine Jira issue environment using
-#     project-specific labels.
-#     """
-#
-#     if not labels:
-#         return None
-#
-#     normalized_labels = {
-#         str(label).strip().lower()
-#         for label in labels
-#     }
-#
-#     configured_uat_label = (
-#         str(uat_label).strip().lower()
-#     )
-#
-#     configured_prod_label = (
-#         str(prod_label).strip().lower()
-#     )
-#
-#     if configured_uat_label in normalized_labels:
-#         return "UAT"
-#
-#     if configured_prod_label in normalized_labels:
-#         return "PROD"
-#
-#     return None
+        "project_id": project_id,
+
+        "project_name": project.name,
+
+        "jql": jql,
+
+        "environment_field": (
+            environment_field
+            or None
+        ),
+
+        "page": page,
+
+        "per_page": per_page,
+
+        "total": total,
+
+        "uat_total": len(
+            uat_bugs
+        ),
+
+        "prod_total": len(
+            prod_bugs
+        ),
+
+        "pages": (
+            total // per_page
+        )
+        + (
+            1
+            if total % per_page
+            else 0
+        ),
+
+        "bugs": paged_bugs,
+
+        "uat_bugs": paged_uat,
+
+        "prod_bugs": paged_prod,
+    }
 
 def get_issue_environment(labels, uat_label, prod_label):
     """
@@ -845,21 +890,32 @@ def get_issue_environment(labels, uat_label, prod_label):
 
     return None
 
-@router.get("/{project_id}/jira/features")
+@router.get(
+    "/{project_id}/jira/features"
+)
 async def get_jira_features(
     project_id: int,
-    page: int = Query(default=1, ge=1),
-    per_page: int = Query(default=20, ge=5, le=200),
-    search: str = Query(default=""),
+    page: int = Query(
+        default=1,
+        ge=1,
+    ),
+    per_page: int = Query(
+        default=20,
+        ge=5,
+        le=200,
+    ),
     db: Session = Depends(get_db),
 ):
-    # ---------------------------------------------------------
-    # Validate project
-    # ---------------------------------------------------------
+
+    # ========================================================
+    # 1. Validate project
+    # ========================================================
 
     project = (
         db.query(Project)
-        .filter(Project.id == project_id)
+        .filter(
+            Project.id == project_id
+        )
         .first()
     )
 
@@ -869,14 +925,16 @@ async def get_jira_features(
             detail="Project not found",
         )
 
-    # ---------------------------------------------------------
-    # Get Jira configuration
-    # ---------------------------------------------------------
+    # ========================================================
+    # 2. Get Jira configuration
+    # ========================================================
 
     config = (
         db.query(JiraConfiguration)
         .filter(
-            JiraConfiguration.project_id == project_id,
+            JiraConfiguration.project_id
+            == project_id,
+
             JiraConfiguration.active.is_(True),
         )
         .first()
@@ -885,181 +943,278 @@ async def get_jira_features(
     if not config:
         return {
             "configured": False,
-            "page": page,
-            "per_page": per_page,
-            "total": 0,
-            "pages": 0,
+            "project_id": project_id,
             "features": [],
         }
 
-    # ---------------------------------------------------------
-    # Use Feature / Story JQL configured by the user
-    # ---------------------------------------------------------
+    # ========================================================
+    # 3. Environment configuration
+    # ========================================================
 
-    feature_jql = (
-        config.feature_jql or ""
+    environment_field = (
+        getattr(
+            config,
+            "environment_field",
+            None,
+        )
+        or ""
     ).strip()
 
+    uat_label = (
+        config.uat_label.strip()
+        if config.uat_label
+        else None
+    )
+
+    prod_label = (
+        config.prod_label.strip()
+        if config.prod_label
+        else None
+    )
+
+    # ========================================================
+    # 4. Build Feature JQL
+    # ========================================================
+
+    feature_jql = (
+        config.feature_jql
+        or ""
+    ).strip()
+
+    # --------------------------------------------------------
+    # If feature_jql is not configured, generate it from
+    # the project's base JQL.
+    # --------------------------------------------------------
+
     if not feature_jql:
-        raise HTTPException(
-            status_code=400,
-            detail="Feature/Story JQL is not configured",
-        )
 
-    # ---------------------------------------------------------
-    # Add UI search to Feature / Story JQL
-    # ---------------------------------------------------------
+        base_jql = (
+            config.jql
+            or ""
+        ).strip()
 
-    search = search.strip()
+        if not base_jql:
+            raise HTTPException(
+                status_code=500,
+                detail="Jira JQL is not configured.",
+            )
 
-    if search:
-        # Search Jira issue key or summary.
-        #
-        # Example:
-        #
-        # User JQL:
-        # project = ABC AND issuetype in ("Feature", "Story")
-        #
-        # Search:
-        # payment
-        #
-        # Resulting JQL:
-        #
-        # (project = ABC AND issuetype in ("Feature", "Story"))
-        # AND (summary ~ "payment" OR key = "payment")
-        #
-        escaped_search = (
-            search
-            .replace("\\", "\\\\")
-            .replace('"', '\\"')
-        )
-
+        # Remove existing issue type condition if required
+        # by your existing configuration.
         feature_jql = (
-            f'({feature_jql}) '
-            f'AND (summary ~ "{escaped_search}" '
-            f'OR key = "{escaped_search}")'
+            f"({base_jql}) "
+            "AND issuetype in (Story, Task, Epic)"
         )
 
-    # ---------------------------------------------------------
-    # Fetch issues from Jira
-    # ---------------------------------------------------------
+    # ========================================================
+    # 5. Fetch Jira features
+    # ========================================================
 
     try:
-        jira_data = await search_jira_features(
-            jira_url=config.jira_url,
-            jira_email=config.jira_email,
-            jira_api_token=config.jira_api_token,
-            jql=feature_jql,
+
+        jira_data = (
+            await search_jira_features(
+                jira_url=config.jira_url,
+                jira_email=config.jira_email,
+                jira_api_token=config.jira_api_token,
+                jql=feature_jql,
+                environment_field=(
+                    environment_field
+                    or None
+                ),
+            )
         )
 
     except Exception as exc:
+
         raise HTTPException(
             status_code=502,
-            detail=f"Unable to fetch Jira features: {str(exc)}",
+            detail=(
+                "Unable to fetch Jira features: "
+                f"{str(exc)}"
+            ),
         )
 
-    # ---------------------------------------------------------
-    # Jira issues
-    # ---------------------------------------------------------
+    # ========================================================
+    # 6. Raw features
+    # ========================================================
 
-    features_raw = jira_data.get(
-        "issues",
-        [],
+    features_raw = (
+        jira_data.get(
+            "issues",
+            [],
+        )
     )
 
-    total = len(features_raw)
+    total = len(
+        features_raw
+    )
 
-    # ---------------------------------------------------------
-    # Pagination
-    # ---------------------------------------------------------
+    # ========================================================
+    # 7. Pagination
+    # ========================================================
 
-    start = (page - 1) * per_page
-    end = start + per_page
+    start = (
+        page - 1
+    ) * per_page
 
-    page_issues = features_raw[start:end]
-
-    # ---------------------------------------------------------
-    # Convert Jira response
-    # ---------------------------------------------------------
+    end = (
+        start + per_page
+    )
 
     features = []
 
-    for issue in page_issues:
+    # ========================================================
+    # 8. Normalize Jira features
+    # ========================================================
 
-        fields = issue.get(
-            "fields",
-            {},
+    for issue in features_raw[
+        start:end
+    ]:
+
+        fields = (
+            issue.get(
+                "fields",
+                {},
+            )
+            or {}
         )
 
-        status = fields.get("status") or {}
-        priority = fields.get("priority") or {}
-        assignee = fields.get("assignee") or {}
-        parent = fields.get("parent") or {}
+        status = fields.get(
+            "status"
+        )
 
-        features.append({
-            "jira_id": issue.get("key"),
+        priority = fields.get(
+            "priority"
+        )
 
-            "summary": fields.get(
-                "summary"
-            ),
+        assignee = fields.get(
+            "assignee"
+        )
 
-            "status": status.get(
-                "name"
-            ),
+        parent = fields.get(
+            "parent"
+        )
 
-            "priority": priority.get(
-                "name"
-            ),
-
-            "assignee": assignee.get(
-                "displayName"
-            ),
-
-            "story_points": fields.get(
-                "customfield_10008"
-            ),
-
-            "epic": parent.get(
-                "key"
-            ),
-
-            "created": fields.get(
-                "created"
-            ),
-
-            "updated": fields.get(
-                "updated"
-            ),
-
-            "labels": fields.get(
+        labels = (
+            fields.get(
                 "labels"
-            ) or [],
+            )
+            or []
+        )
 
-            # Return issue type as well
-            # so UI can display Feature / Story.
-            "issue_type": (
-                fields.get("issuetype") or {}
-            ).get("name"),
-        })
+        # ----------------------------------------------------
+        # Determine environment
+        # ----------------------------------------------------
 
-    # ---------------------------------------------------------
-    # Calculate pages
-    # ---------------------------------------------------------
+        environment = (
+            get_issue_environment(
+                fields=fields,
+                environment_field=(
+                    environment_field
+                    or None
+                ),
+                uat_label=uat_label,
+                prod_label=prod_label,
+            )
+        )
 
-    pages = (
-        total // per_page
-        + (1 if total % per_page else 0)
-    )
+        features.append(
+            {
+                "jira_id": issue.get(
+                    "key"
+                ),
 
-    # ---------------------------------------------------------
-    # Response
-    # ---------------------------------------------------------
+                "summary": fields.get(
+                    "summary"
+                ),
+
+                "status": (
+                    status.get("name")
+                    if isinstance(
+                        status,
+                        dict,
+                    )
+                    else None
+                ),
+
+                "priority": (
+                    priority.get("name")
+                    if isinstance(
+                        priority,
+                        dict,
+                    )
+                    else None
+                ),
+
+                "assignee": (
+                    assignee.get(
+                        "displayName"
+                    )
+                    if isinstance(
+                        assignee,
+                        dict,
+                    )
+                    else None
+                ),
+
+                "story_points": fields.get(
+                    "customfield_10008"
+                ),
+
+                "epic": (
+                    parent.get("key")
+                    if isinstance(
+                        parent,
+                        dict,
+                    )
+                    else None
+                ),
+
+                "created": fields.get(
+                    "created"
+                ),
+
+                "updated": fields.get(
+                    "updated"
+                ),
+
+                "environment": environment,
+
+                "labels": labels,
+            }
+        )
+
+    # ========================================================
+    # 9. Response
+    # ========================================================
 
     return {
         "configured": True,
+
+        "project_id": project_id,
+
         "page": page,
+
         "per_page": per_page,
+
         "total": total,
-        "pages": pages,
+
+        "pages": (
+            total // per_page
+        )
+        + (
+            1
+            if total % per_page
+            else 0
+        ),
+
+        "jql": feature_jql,
+
+        "environment_field": (
+            environment_field
+            or None
+        ),
+
         "features": features,
     }
