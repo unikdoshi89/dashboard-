@@ -604,12 +604,13 @@ async def get_jira_bugs(
 
     try:
 
-        jira_data = await search_jira_bugs(
-            jira_url=config.jira_url,
-            jira_email=config.jira_email,
-            jira_api_token=config.jira_api_token,
-            jql=jql,
-        )
+        result = await search_jira_bugs(
+    jira_url=config.jira_url,
+    jira_email=config.jira_email,
+    jira_api_token=config.jira_api_token,
+    jql=config.jql,
+    environment_field=config.environment_field,
+)
 
     except Exception as exc:
 
@@ -650,9 +651,10 @@ async def get_jira_bugs(
         # ----------------------------------------------------
 
         environment = get_issue_environment(
-            labels=labels,
-            uat_label=config.uat_label,
-            prod_label=config.prod_label,
+          fields=fields,
+          environment_field=config.environment_field,
+          uat_label=config.uat_label,
+          prod_label=config.prod_label,
         )
 
         # ----------------------------------------------------
@@ -742,19 +744,32 @@ async def get_jira_bugs(
     paged_uat = uat_bugs[start:end]
     paged_prod = prod_bugs[start:end]
     return {
-        "configured": True,
-        "project_id": project_id,
-        "project_name": project.name,
-        "jql": jql,
-
-        "page": page,
-        "per_page": per_page,
-        "total": total,
-        "pages": (total // per_page) + (1 if total % per_page else 0),
-
-        "bugs": paged_bugs,
-        "uat_bugs": paged_uat,
-        "prod_bugs": paged_prod,
+    "jira_id": issue.get("key"),
+    "summary": fields.get("summary"),
+    "status": (
+        fields.get("status", {}).get("name")
+        if fields.get("status")
+        else None
+    ),
+    "priority": (
+        fields.get("priority", {}).get("name")
+        if fields.get("priority")
+        else None
+    ),
+    "assignee": (
+        fields.get("assignee", {}).get("displayName")
+        if fields.get("assignee")
+        else None
+    ),
+    "reporter": (
+        fields.get("reporter", {}).get("displayName")
+        if fields.get("reporter")
+        else None
+    ),
+    "created": fields.get("created"),
+    "updated": fields.get("updated"),
+    "environment": environment,
+    "labels": fields.get("labels") or [],
     }
 
 # def get_issue_environment(
