@@ -6,6 +6,7 @@ from app.models.project_metric import ProjectMetric
 from app.models.metric_value import MetricValue
 
 
+```python
 def calculate_metric_score(
     value,
     metric_definition,
@@ -18,12 +19,15 @@ def calculate_metric_score(
     target = Decimal(
         str(metric_definition.default_target)
     )
+
     warning = Decimal(
         str(metric_definition.warning_threshold)
     )
+
     critical = Decimal(
         str(metric_definition.critical_threshold)
     )
+
     direction = metric_definition.direction
 
     # ================================================================
@@ -43,34 +47,20 @@ def calculate_metric_score(
         )
 
     # ================================================================
-    # Production Quality:
-    # Every production bug reduces the score by 10 percentage points
+    # Higher is Better
     #
-    # 0 bugs  = 100
-    # 1 bug   = 90
-    # 2 bugs  = 80
-    # ...
-    # 10 bugs = 0
-    # 10+ bugs = 0
+    # Target     = 100 score
+    # Warning    = 75 score
+    # Critical   = 40 score
+    # Below Critical = proportional score down to 0
     # ================================================================
-    if metric_definition.metric_key in (
-        "prod_bugs_3_months",
-        "prod_bugs_1_month",
-    ):
-        score = Decimal("100") - (
-            value * Decimal("10")
-        )
-
-        return max(
-            Decimal("0"),
-            min(Decimal("100"), score),
-        )
-
     if direction == "higher_is_better":
 
+        # At or above target
         if value >= target:
             return Decimal("100")
 
+        # Between warning and target
         if value >= warning:
 
             if target == warning:
@@ -81,6 +71,7 @@ def calculate_metric_score(
                 / (target - warning)
             ) * Decimal("25")
 
+        # Between critical and warning
         if value >= critical:
 
             if warning == critical:
@@ -91,16 +82,36 @@ def calculate_metric_score(
                 / (warning - critical)
             ) * Decimal("35")
 
+        # Below critical
+        if critical == 0:
+            return Decimal("0")
+
         return max(
             Decimal("0"),
             (value / critical) * Decimal("40")
         )
 
+    # ================================================================
+    # Lower is Better
+    #
+    # Example Production Quality:
+    #
+    # Target   = 3
+    # Warning  = 5
+    # Critical = 8
+    #
+    # 0-3 bugs  = 100
+    # 3-5 bugs  = 75-100
+    # 5-8 bugs  = 40-75
+    # >8 bugs   = 0
+    # ================================================================
     if direction == "lower_is_better":
 
+        # At or below target
         if value <= target:
             return Decimal("100")
 
+        # Between target and warning
         if value <= warning:
 
             if warning == target:
@@ -111,6 +122,7 @@ def calculate_metric_score(
                 / (warning - target)
             ) * Decimal("25")
 
+        # Between warning and critical
         if value <= critical:
 
             if critical == warning:
@@ -121,9 +133,12 @@ def calculate_metric_score(
                 / (critical - warning)
             ) * Decimal("35")
 
+        # Above critical
         return Decimal("0")
 
     return Decimal("0")
+```
+
 
 def calculate_category_score(
     db,
