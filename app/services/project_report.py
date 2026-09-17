@@ -42,11 +42,12 @@ from app.services.quality_score import (
 )
 
 
-def get_issue_environment(
-    labels,
-    uat_label=None,
-    prod_label=None,
-):
+get_issue_environment(
+    fields=fields,
+    environment_field=...,
+    uat_label=...,
+    prod_label=...,
+)
     """
     Determine Jira issue environment from labels.
 
@@ -2198,18 +2199,23 @@ def generate_project_report_html(
         )
 
         environment = get_issue_environment(
-            labels=labels,
-            uat_label=(
-                jira_config.uat_label
-                if jira_config
-                else None
-            ),
-            prod_label=(
-                jira_config.prod_label
-                if jira_config
-                else None
-            ),
-        )
+    fields=fields,
+    environment_field=(
+        jira_config.environment_field
+        if jira_config
+        else None
+    ),
+    uat_label=(
+        jira_config.uat_label
+        if jira_config
+        else None
+    ),
+    prod_label=(
+        jira_config.prod_label
+        if jira_config
+        else None
+    ),
+)
 
         jira_issue_rows.append(
             f"""
