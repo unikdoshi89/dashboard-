@@ -534,6 +534,7 @@ async def download_project_report(
         },
     )
 
+```python
 @router.get(
     "/projects/{project_id}/report/html",
     response_class=HTMLResponse,
@@ -573,6 +574,10 @@ async def project_html_report(
     jira_issues = []
     jira_features = []
 
+    # ==========================================================
+    # Jira configuration
+    # ==========================================================
+
     jira_config = (
         db.query(JiraConfiguration)
         .filter(
@@ -595,41 +600,49 @@ async def project_html_report(
                 jira_email=jira_config.jira_email,
                 jira_api_token=jira_config.jira_api_token,
                 jql=jira_config.jql,
+                environment_field=(
+                    jira_config.environment_field
+                    if jira_config.environment_field
+                    else None
+                ),
             )
 
-            jira_issues = jira_data.get(
-                "issues",
-                [],
+            jira_issues = (
+                jira_data.get(
+                    "issues",
+                    [],
+                )
+                if jira_data
+                else []
             )
 
             jira_total = len(
                 jira_issues
             )
 
+            # --------------------------------------------------
+            # Determine environment
+            # --------------------------------------------------
+
             for issue in jira_issues:
 
-                fields = issue.get(
-                    "fields",
-                    {},
+                fields = (
+                    issue.get(
+                        "fields",
+                        {},
+                    )
+                    or {}
                 )
 
-                labels = (
-                    fields.get(
-                        "labels"
-                    )
-                    or []
-                )
-
-                environment = (
-                    get_issue_environment(
-                        labels=labels,
-                        uat_label=(
-                            jira_config.uat_label
-                        ),
-                        prod_label=(
-                            jira_config.prod_label
-                        ),
-                    )
+                environment = get_issue_environment(
+                    fields=fields,
+                    environment_field=(
+                        jira_config.environment_field
+                        if jira_config.environment_field
+                        else None
+                    ),
+                    uat_label=jira_config.uat_label,
+                    prod_label=jira_config.prod_label,
                 )
 
                 if environment == "UAT":
@@ -640,6 +653,13 @@ async def project_html_report(
 
                     jira_prod += 1
 
+            # --------------------------------------------------
+            # Remaining bugs
+            #
+            # Anything that is neither UAT nor PROD
+            # is displayed as SIT.
+            # --------------------------------------------------
+
             jira_sit = max(
                 jira_total
                 - jira_uat
@@ -647,14 +667,53 @@ async def project_html_report(
                 0,
             )
 
+            print(
+                "HTML REPORT JIRA SUMMARY:",
+                {
+                    "project_id": project_id,
+                    "total": jira_total,
+                    "uat": jira_uat,
+                    "prod": jira_prod,
+                    "sit": jira_sit,
+                    "environment_field": (
+                        jira_config.environment_field
+                        if jira_config.environment_field
+                        else None
+                    ),
+                },
+            )
+
         except Exception as exc:
 
+            import traceback
+
             print(
-                "HTML report Jira bug fetch failed:",
-                exc,
+                "========================================"
+            )
+
+            print(
+                "HTML REPORT JIRA BUG FETCH FAILED"
+            )
+
+            print(
+                "========================================"
+            )
+
+            print(
+                str(exc)
+            )
+
+            traceback.print_exc()
+
+            print(
+                "========================================"
             )
 
             # Do not fail the complete report.
+            #
+            # Keep the report generation alive, but make
+            # the Jira failure visible in backend logs.
+
             jira_total = 0
             jira_uat = 0
             jira_prod = 0
@@ -688,6 +747,11 @@ async def project_html_report(
                             jira_config.jira_api_token
                         ),
                         jql=feature_jql,
+                        environment_field=(
+                            jira_config.environment_field
+                            if jira_config.environment_field
+                            else None
+                        ),
                     )
                 )
 
@@ -696,14 +760,20 @@ async def project_html_report(
                         "issues",
                         [],
                     )
+                    if feature_data
+                    else []
                 )
 
             except Exception as exc:
+
+                import traceback
 
                 print(
                     "HTML report Jira feature fetch failed:",
                     exc,
                 )
+
+                traceback.print_exc()
 
                 jira_features = []
 
@@ -716,10 +786,14 @@ async def project_html_report(
         html = generate_project_report_html(
             db=db,
             project_id=project_id,
+
+            # Jira summary
             jira_total=jira_total,
             jira_uat=jira_uat,
             jira_prod=jira_prod,
             jira_sit=jira_sit,
+
+            # Jira details
             jira_issues=jira_issues,
             jira_features=jira_features,
         )
@@ -762,6 +836,8 @@ async def project_html_report(
         content=html,
         status_code=200,
     )
+```
+
 
 @router.post(
     "/projects/{project_id}/automation/upload"
