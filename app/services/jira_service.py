@@ -52,6 +52,7 @@ async def search_jira_bugs(
     jira_email: str,
     jira_api_token: str,
     jql: str,
+    environment_field: str | None = None,
     max_results: int = 100,
 ):
     url = (
@@ -77,16 +78,19 @@ async def search_jira_bugs(
             payload = {
                 "jql": jql,
                 "maxResults": max_results,
-                "fields": [
-                    "summary",
-                    "status",
-                    "priority",
-                    "assignee",
-                    "reporter",
-                    "created",
-                    "updated",
-                    "labels",
-                ],
+                fields = [
+    "summary",
+    "status",
+    "priority",
+    "assignee",
+    "reporter",
+    "created",
+    "updated",
+    "labels",
+]
+
+if environment_field:
+    fields.append(environment_field),
             }
 
             # Add pagination token only after first request
@@ -138,6 +142,7 @@ async def search_jira_features(
     jira_email: str,
     jira_api_token: str,
     jql: str,
+    environment_field: str | None = None,
     max_results: int = 100,
 ):
     url = (
@@ -163,17 +168,20 @@ async def search_jira_features(
             payload = {
                 "jql": jql,
                 "maxResults": max_results,
-                "fields": [
-                    "summary",
-                    "status",
-                    "priority",
-                    "assignee",
-                    "reporter",
-                    "created",
-                    "updated",
-                    "labels",
-                    "parent",
-                ],
+               fields = [
+    "summary",
+    "status",
+    "priority",
+    "assignee",
+    "reporter",
+    "created",
+    "updated",
+    "labels",
+    "parent",
+]
+
+if environment_field:
+    fields.append(environment_field),
             }
 
             # Add pagination token only after first request
@@ -218,3 +226,88 @@ async def search_jira_features(
         "issues": all_features,
         "total": len(all_features),
     }
+
+def get_issue_environment(
+    fields,
+    environment_field=None,
+    uat_label=None,
+    prod_label=None,
+):
+    """
+    Determine issue environment.
+
+    Priority:
+    1. Configured Jira environment field
+    2. UAT label
+    3. PROD label
+    4. None
+    """
+
+    fields = fields or {}
+
+    # ============================================================
+    # 1. ENVIRONMENT FIELD
+    # ============================================================
+
+    if environment_field:
+
+        environment = fields.get(
+            environment_field
+        )
+
+        if isinstance(environment, dict):
+            environment = (
+                environment.get("value")
+                or environment.get("name")
+            )
+
+        elif isinstance(environment, list):
+
+            values = []
+
+            for item in environment:
+
+                if isinstance(item, dict):
+                    value = (
+                        item.get("value")
+                        or item.get("name")
+                    )
+                else:
+                    value = str(item)
+
+                if value:
+                    values.append(value)
+
+            environment = ", ".join(values)
+
+        if environment:
+
+            environment = str(
+                environment
+            ).strip().upper()
+
+            if environment == "UAT":
+                return "UAT"
+
+            if environment == "PROD":
+                return "PROD"
+
+    # ============================================================
+    # 2. LABEL FALLBACK
+    # ============================================================
+
+    labels = fields.get("labels") or []
+
+    if (
+        uat_label
+        and uat_label in labels
+    ):
+        return "UAT"
+
+    if (
+        prod_label
+        and prod_label in labels
+    ):
+        return "PROD"
+
+    return None
