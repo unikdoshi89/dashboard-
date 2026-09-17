@@ -82,3 +82,17 @@ class JiraConfiguration(Base):
         onupdate=datetime.utcnow,
         nullable=False,
     )
+     environment_field: Mapped[str | None] = mapped_column(
+    String(150),
+    nullable=True,
+)
+
+uat_environment: Mapped[str | None] = mapped_column(
+    String(100),
+    nullable=True,
+)
+
+prod_environment: Mapped[str | None] = mapped_column(
+    String(100),
+    nullable=True,
+)
