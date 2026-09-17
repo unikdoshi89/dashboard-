@@ -66,6 +66,7 @@ function JiraDetails() {
 
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState("all");
+  const [environmentField, setEnvironmentField] = useState("");
 
   // ============================================================
   // Jira Features / Stories
@@ -104,6 +105,7 @@ function JiraDetails() {
       setJiraEmail(data.jira_email || "");
       setJql(data.jql || "");
       setFeatureJql(data.feature_jql || "");
+      setEnvironmentField(data.environment_field || "");
 
       setUatLabels(
         (data.uat_label || "")
@@ -310,6 +312,13 @@ function JiraDetails() {
         return;
       }
 
+      if (!environmentField.trim()) {
+        setConfigError(
+          "Jira environment field is required."
+        );
+        return;
+      }
+
       if (uatLabels.length === 0) {
         setConfigError(
           "At least one UAT issue label is required."
@@ -340,6 +349,7 @@ function JiraDetails() {
         jira_api_token: jiraApiToken.trim(),
         jql: jql.trim(),
         feature_jql: featureJql.trim(),
+        environment_field: environmentField.trim(),
         uat_label: uatLabels.join(","),
         prod_label: prodLabels.join(","),
         active,
@@ -859,6 +869,28 @@ function JiraDetails() {
                   JQL used to fetch Features and Stories. Enter the complete Jira JQL you want to use.
                 </p>
 
+              </div>
+
+
+              {/* Environment Field */}
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Jira Environment Field
+                </label>
+
+                <input
+                  type="text"
+                  value={environmentField}
+                  onChange={(e) =>
+                    setEnvironmentField(e.target.value)
+                  }
+                  placeholder="e.g. ENV_IOP or customfield_12345"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+
+                <p className="text-xs text-gray-500 mt-1">
+                  Jira field used to identify the issue environment. The field value should be UAT or PROD. This can be different for each project.
+                </p>
               </div>
 
 
