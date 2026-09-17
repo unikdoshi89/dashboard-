@@ -70,6 +70,11 @@ class JiraConfigurationCreate(BaseModel):
     feature_jql: str
     uat_label: str
     prod_label: str
+
+    environment_field: Optional[str] = None
+    uat_environment: Optional[str] = None
+    prod_environment: Optional[str] = None
+
     active: bool = True
 
 
@@ -82,6 +87,11 @@ class JiraConfigurationResponse(BaseModel):
     feature_jql: str
     uat_label: str
     prod_label: str
+
+    environment_field: Optional[str] = None
+    uat_environment: Optional[str] = None
+    prod_environment: Optional[str] = None
+
     active: bool
 
     model_config = ConfigDict(
