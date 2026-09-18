@@ -75,30 +75,23 @@ async def search_jira_bugs(
 
         while True:
 
-            fields = [
-                "summary",
-                "status",
-                "priority",
-                "assignee",
-                "reporter",
-                "created",
-                "updated",
-                "labels",
-            ]
-
-            # --------------------------------------------------
-            # Add project-specific Jira environment field
-            # --------------------------------------------------
-
-            if environment_field:
-                if environment_field not in fields:
-                    fields.append(environment_field)
-
             payload = {
                 "jql": jql,
                 "maxResults": max_results,
-                "fields": fields,
+                "fields": [
+                    "summary",
+                    "status",
+                    "priority",
+                    "assignee",
+                    "reporter",
+                    "created",
+                    "updated",
+                    "labels",
+                ],
             }
+
+            if environment_field:
+                fields.append(environment_field)
 
             # Add pagination token only after first request
             if next_page_token:
@@ -130,6 +123,7 @@ async def search_jira_bugs(
 
             all_issues.extend(issues)
 
+            # Jira returns this when another page exists
             next_page_token = data.get(
                 "nextPageToken"
             )
@@ -171,32 +165,24 @@ async def search_jira_features(
 
         while True:
 
-            fields = [
-                "summary",
-                "status",
-                "priority",
-                "assignee",
-                "reporter",
-                "created",
-                "updated",
-                "labels",
-                "parent",
-                "issuetype",
-            ]
-
-            # --------------------------------------------------
-            # Add project-specific Jira environment field
-            # --------------------------------------------------
-
-            if environment_field:
-                if environment_field not in fields:
-                    fields.append(environment_field)
-
             payload = {
                 "jql": jql,
                 "maxResults": max_results,
-                "fields": fields,
+                "fields": [
+                    "summary",
+                    "status",
+                    "priority",
+                    "assignee",
+                    "reporter",
+                    "created",
+                    "updated",
+                    "labels",
+                    "parent",
+                ],
             }
+
+            if environment_field:
+                fields.append(environment_field)
 
             # Add pagination token only after first request
             if next_page_token:
@@ -228,6 +214,7 @@ async def search_jira_features(
 
             all_features.extend(features)
 
+            # Jira returns this when another page exists
             next_page_token = data.get(
                 "nextPageToken"
             )
@@ -248,30 +235,13 @@ def get_issue_environment(
     prod_label=None,
 ):
     """
-    Determine Jira issue environment.
+    Determine issue environment.
 
     Priority:
     1. Configured Jira environment field
     2. UAT label
     3. PROD label
     4. None
-
-    The environment field is project-specific.
-
-    Example:
-        environment_field = "customfield_12345"
-
-    Jira value can be:
-        {"value": "PROD"}
-
-    or:
-        {"name": "PROD"}
-
-    or:
-        "PROD"
-
-    or:
-        [{"value": "PROD"}]
     """
 
     fields = fields or {}
@@ -287,7 +257,6 @@ def get_issue_environment(
         )
 
         if isinstance(environment, dict):
-
             environment = (
                 environment.get("value")
                 or environment.get("name")
@@ -300,88 +269,46 @@ def get_issue_environment(
             for item in environment:
 
                 if isinstance(item, dict):
-
                     value = (
                         item.get("value")
                         or item.get("name")
                     )
-
                 else:
-
                     value = str(item)
 
                 if value:
-                    values.append(
-                        str(value).strip()
-                    )
+                    values.append(value)
 
-            environment = ", ".join(
-                values
-            )
+            environment = ", ".join(values)
 
         if environment:
 
-            normalized_environment = (
-                str(environment)
-                .strip()
-                .upper()
-            )
+            environment = str(
+                environment
+            ).strip().upper()
 
-            if normalized_environment == "UAT":
+            if environment == "UAT":
                 return "UAT"
 
-            if normalized_environment == "PROD":
+            if environment == "PROD":
                 return "PROD"
 
     # ============================================================
     # 2. LABEL FALLBACK
     # ============================================================
 
-    labels = fields.get(
-        "labels"
-    ) or []
+    labels = fields.get("labels") or []
 
-    normalized_labels = {
-        str(label).strip().lower()
-        for label in labels
-    }
+    if (
+        uat_label
+        and uat_label in labels
+    ):
+        return "UAT"
 
-    # ------------------------------------------------------------
-    # UAT labels
-    # ------------------------------------------------------------
-
-    if uat_label:
-
-        uat_labels = [
-            label.strip().lower()
-            for label in str(
-                uat_label
-            ).split(",")
-            if label.strip()
-        ]
-
-        for label in uat_labels:
-
-            if label in normalized_labels:
-                return "UAT"
-
-    # ------------------------------------------------------------
-    # PROD labels
-    # ------------------------------------------------------------
-
-    if prod_label:
-
-        prod_labels = [
-            label.strip().lower()
-            for label in str(
-                prod_label
-            ).split(",")
-            if label.strip()
-        ]
-
-        for label in prod_labels:
-
-            if label in normalized_labels:
-                return "PROD"
+    if (
+        prod_label
+        and prod_label in labels
+    ):
+        return "PROD"
 
     return None
