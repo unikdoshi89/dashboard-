@@ -42,31 +42,7 @@ from app.services.quality_score import (
 )
 
 
-def get_issue_environment(
-    labels,
-    uat_label=None,
-    prod_label=None,
-):
-    """
-    Determine Jira issue environment from labels.
-
-    Priority:
-    1. Production label
-    2. UAT label
-    3. SIT
-    """
-
-    labels = labels or []
-
-    if prod_label and prod_label in labels:
-        return "Production"
-
-    if uat_label and uat_label in labels:
-        return "UAT"
-
-    return "SIT"
-
-
+from app.services.jira_service import get_issue_environment
 def _status_color(status):
     if not status:
         return colors.grey
@@ -1676,6 +1652,10 @@ def generate_project_report_html(
     jira_sit: int = 0,
     jira_issues=None,
     jira_features=None,
+    jira_sit_issues=None,
+    jira_uat_issues=None,
+    jira_prod_issues=None,
+    jira_issue_environments=None,
 ):
     """
     Generate a complete interactive HTML report.
@@ -1688,6 +1668,10 @@ def generate_project_report_html(
 
     jira_issues = jira_issues or []
     jira_features = jira_features or []
+    jira_sit_issues = jira_sit_issues or []
+    jira_uat_issues = jira_uat_issues or []
+    jira_prod_issues = jira_prod_issues or []
+    jira_issue_environments = jira_issue_environments or {}
 
     # ==========================================================
     # PROJECT
@@ -2183,61 +2167,79 @@ def generate_project_report_html(
     # JIRA ISSUES
     # ==========================================================
 
-    jira_issue_rows = []
+    def build_jira_issue_rows(issues, default_environment):
+        rows = []
 
-    for issue in jira_issues:
+        for issue in issues:
+            fields = (issue.get("fields", {}) or {})
+            issue_key = issue.get("key")
+            jira_id_html = esc(issue_key)
 
-        fields = issue.get(
-            "fields",
-            {},
-        )
+            if issue_key and jira_config and jira_config.jira_url:
+                jira_issue_url = (
+                    f"{jira_config.jira_url.rstrip('/')}"
+                    f"/browse/{issue_key}"
+                )
+                jira_id_html = (
+                    f'<a href="{esc(jira_issue_url)}" '
+                    f'target="_blank" rel="noopener noreferrer">'
+                    f'{esc(issue_key)}</a>'
+                )
 
-        labels = (
-            fields.get("labels")
-            or []
-        )
+            status = fields.get("status") or {}
+            priority = fields.get("priority") or {}
+            assignee = fields.get("assignee") or {}
 
-        environment = get_issue_environment(
-            labels=labels,
-            uat_label=(
-                jira_config.uat_label
-                if jira_config
-                else None
-            ),
-            prod_label=(
-                jira_config.prod_label
-                if jira_config
-                else None
-            ),
-        )
+            environment = (
+                jira_issue_environments.get(issue_key)
+                or default_environment
+                or "SIT"
+            )
 
-        jira_issue_rows.append(
-            f"""
-            <tr>
-                <td>{esc(issue.get("key"))}</td>
-                <td>{esc(fields.get("summary"))}</td>
-                <td>
-                    {esc(
-                        fields.get(
-                            "status",
-                            {}
-                        ).get("name")
-                    )}
-                </td>
-                <td>
-                    {esc(
-                        fields.get(
-                            "priority",
-                            {}
-                        ).get("name")
-                    )}
-                </td>
-                <td>{esc(environment or "SIT")}</td>
-                <td> {esc( (fields.get("assignee") or {}).get("displayName") or "Unassigned" )} </td>
+            rows.append(
+                f"""
+                <tr>
+                    <td>{jira_id_html}</td>
+                    <td>{esc(fields.get("summary"))}</td>
+                    <td>{esc(status.get("name"))}</td>
+                    <td>{esc(priority.get("name"))}</td>
+                    <td>{esc(environment)}</td>
+                    <td>{esc(assignee.get("displayName") or "Unassigned")}</td>
+                </tr>
+                """
+            )
 
-            </tr>
-            """
-        )
+        return "".join(rows)
+
+    jira_sit_rows = build_jira_issue_rows(jira_sit_issues, "SIT")
+    jira_uat_rows = build_jira_issue_rows(jira_uat_issues, "UAT")
+    jira_prod_rows = build_jira_issue_rows(jira_prod_issues, "PROD")
+
+    def jira_bug_table(rows):
+        if not rows:
+            rows = (
+                '<tr><td colspan="6">No Jira bugs available.</td></tr>'
+            )
+
+        return f"""
+        <div class="table-wrapper jira-environment-table">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Jira ID</th>
+                        <th>Summary</th>
+                        <th>Status</th>
+                        <th>Priority</th>
+                        <th>Environment</th>
+                        <th>Assignee</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {rows}
+                </tbody>
+            </table>
+        </div>
+        """
 
     # ==========================================================
     # JIRA FEATURES
@@ -2801,6 +2803,85 @@ tr:hover td {{
 
 }}
 
+
+.jira-environment-links {{
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}}
+
+.jira-environment-section {{
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    background: #ffffff;
+    overflow: hidden;
+}}
+
+.jira-environment-section summary {{
+    list-style: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 18px;
+    color: #2563eb;
+    font-weight: 600;
+    font-size: 15px;
+    user-select: none;
+}}
+
+.jira-environment-section summary::-webkit-details-marker {{
+    display: none;
+}}
+
+.jira-environment-section summary::before {{
+    content: "\25B6";
+    margin-right: 10px;
+    font-size: 11px;
+    transition: transform 0.15s ease;
+}}
+
+.jira-environment-section[open] summary::before {{
+    transform: rotate(90deg);
+}}
+
+.jira-environment-section summary span:first-of-type {{
+    margin-right: auto;
+}}
+
+.jira-bug-count {{
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 30px;
+    height: 24px;
+    padding: 0 8px;
+    border-radius: 999px;
+    background: #eff6ff;
+    color: #1d4ed8;
+    font-size: 12px;
+}}
+
+.jira-environment-table {{
+    border-top: 1px solid #e2e8f0;
+    border-radius: 0;
+    margin: 0;
+}}
+
+.jira-environment-table table {{
+    margin: 0;
+}}
+
+.jira-environment-table a {{
+    color: #2563eb;
+    text-decoration: none;
+    font-weight: 600;
+}}
+
+.jira-environment-table a:hover {{
+    text-decoration: underline;
+}}
+
 </style>
 
 </head>
@@ -3232,50 +3313,34 @@ tr:hover td {{
         <section class="section-card">
 
             <div class="section-heading">
-
-                <h2>
-                    Jira Bug Details
-                </h2>
-
+                <h2>Jira Bug Details</h2>
             </div>
 
-            <div class="table-wrapper">
+            <div class="jira-environment-links">
 
-                <table>
+                <details class="jira-environment-section">
+                    <summary>
+                        <span>SIT Bugs</span>
+                        <span class="jira-bug-count">{jira_sit}</span>
+                    </summary>
+                    {jira_bug_table(jira_sit_rows)}
+                </details>
 
-                    <thead>
+                <details class="jira-environment-section">
+                    <summary>
+                        <span>UAT Bugs</span>
+                        <span class="jira-bug-count">{jira_uat}</span>
+                    </summary>
+                    {jira_bug_table(jira_uat_rows)}
+                </details>
 
-                        <tr>
-                            <th>Jira ID</th>
-                            <th>Summary</th>
-                            <th>Status</th>
-                            <th>Priority</th>
-                            <th>Environment</th>
-                            <th>Assignee</th>
-                        </tr>
-
-                    </thead>
-
-                    <tbody>
-
-                        {
-                            "".join(
-                                jira_issue_rows
-                            )
-                            if jira_issue_rows
-                            else
-                            '''
-                            <tr>
-                                <td colspan="6">
-                                    No Jira bugs available.
-                                </td>
-                            </tr>
-                            '''
-                        }
-
-                    </tbody>
-
-                </table>
+                <details class="jira-environment-section">
+                    <summary>
+                        <span>PROD Bugs</span>
+                        <span class="jira-bug-count">{jira_prod}</span>
+                    </summary>
+                    {jira_bug_table(jira_prod_rows)}
+                </details>
 
             </div>
 
