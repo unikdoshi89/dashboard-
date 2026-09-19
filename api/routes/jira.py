@@ -851,42 +851,94 @@ async def get_jira_bugs(
         "prod_bugs": paged_prod,
     }
 
-def get_issue_environment(labels, uat_label, prod_label):
+def get_issue_environment(
+    fields,
+    environment_field=None,
+    uat_label=None,
+    prod_label=None,
+):
     """
-    Determine Jira issue environment using multiple project-specific labels.
-    Supports comma-separated labels OR single labels.
+    Determine Jira issue environment.
+
+    PROD matches when either the configured Jira environment value
+    matches PROD or a configured production label matches.
+
+    UAT matches when either the configured Jira environment value
+    matches UAT or a configured UAT label matches.
+
+    SIT has no explicit tag/value. Any issue that is not classified
+    as UAT or PROD is treated as SIT by the caller.
     """
 
-    if not labels:
-        return None
+    fields = fields or {}
 
-    # Normalize all labels from Jira issue
+    environment_values = set()
+
+    if environment_field:
+        environment = fields.get(environment_field)
+
+        if isinstance(environment, dict):
+            value = (
+                environment.get("value")
+                or environment.get("name")
+            )
+            if value:
+                environment_values.add(
+                    str(value).strip().upper()
+                )
+
+        elif isinstance(environment, list):
+            for item in environment:
+                if isinstance(item, dict):
+                    value = (
+                        item.get("value")
+                        or item.get("name")
+                    )
+                else:
+                    value = item
+
+                if value:
+                    environment_values.add(
+                        str(value).strip().upper()
+                    )
+
+        elif environment is not None:
+            environment_values.add(
+                str(environment).strip().upper()
+            )
+
+    labels = fields.get("labels") or []
     normalized_labels = {
-        str(label).strip().lower() for label in labels
+        str(label).strip().lower()
+        for label in labels
+        if str(label).strip()
     }
 
-    # Convert configured labels to lists (split by comma)
-    uat_labels = [
-        l.strip().lower()
-        for l in str(uat_label).split(",")
-        if l.strip()
-    ]
+    uat_labels = {
+        label.strip().lower()
+        for label in str(uat_label or "").split(",")
+        if label.strip()
+    }
 
-    prod_labels = [
-        l.strip().lower()
-        for l in str(prod_label).split(",")
-        if l.strip()
-    ]
+    prod_labels = {
+        label.strip().lower()
+        for label in str(prod_label or "").split(",")
+        if label.strip()
+    }
 
-    # Check UAT matches
-    for u_label in uat_labels:
-        if u_label in normalized_labels:
-            return "UAT"
+    # Production has precedence when either production source matches.
+    if "PROD" in environment_values:
+        return "PROD"
 
-    # Check PROD matches
-    for p_label in prod_labels:
-        if p_label in normalized_labels:
-            return "PROD"
+    if prod_labels.intersection(normalized_labels):
+        return "PROD"
+
+    # UAT is checked after PROD so a production match always wins.
+    if "UAT" in environment_values:
+        return "UAT"
+
+    if uat_labels.intersection(normalized_labels):
+        return "UAT"
 
     return None
 
