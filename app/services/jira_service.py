@@ -75,25 +75,27 @@ async def search_jira_bugs(
 
         while True:
 
+            fields = [
+                "summary",
+                "status",
+                "priority",
+                "assignee",
+                "reporter",
+                "created",
+                "updated",
+                "labels",
+            ]
+
+            if environment_field:
+                if environment_field not in fields:
+                    fields.append(environment_field)
+
             payload = {
                 "jql": jql,
                 "maxResults": max_results,
-                "fields": [
-                    "summary",
-                    "status",
-                    "priority",
-                    "assignee",
-                    "reporter",
-                    "created",
-                    "updated",
-                    "labels",
-                ],
+                "fields": fields,
             }
 
-            if environment_field:
-                fields.append(environment_field)
-
-            # Add pagination token only after first request
             if next_page_token:
                 payload["nextPageToken"] = next_page_token
 
@@ -123,7 +125,6 @@ async def search_jira_bugs(
 
             all_issues.extend(issues)
 
-            # Jira returns this when another page exists
             next_page_token = data.get(
                 "nextPageToken"
             )
@@ -165,26 +166,29 @@ async def search_jira_features(
 
         while True:
 
+            fields = [
+                "summary",
+                "status",
+                "priority",
+                "assignee",
+                "reporter",
+                "created",
+                "updated",
+                "labels",
+                "parent",
+                "issuetype",
+            ]
+
+            if environment_field:
+                if environment_field not in fields:
+                    fields.append(environment_field)
+
             payload = {
                 "jql": jql,
                 "maxResults": max_results,
-                "fields": [
-                    "summary",
-                    "status",
-                    "priority",
-                    "assignee",
-                    "reporter",
-                    "created",
-                    "updated",
-                    "labels",
-                    "parent",
-                ],
+                "fields": fields,
             }
 
-            if environment_field:
-                fields.append(environment_field)
-
-            # Add pagination token only after first request
             if next_page_token:
                 payload["nextPageToken"] = next_page_token
 
@@ -214,7 +218,6 @@ async def search_jira_features(
 
             all_features.extend(features)
 
-            # Jira returns this when another page exists
             next_page_token = data.get(
                 "nextPageToken"
             )
@@ -228,87 +231,123 @@ async def search_jira_features(
     }
 
 
+def _extract_environment_value(value):
+    """Normalize common Jira environment-field response formats."""
+
+    if isinstance(value, dict):
+        return (
+            value.get("value")
+            or value.get("name")
+            or value.get("displayName")
+        )
+
+    if isinstance(value, list):
+        values = []
+
+        for item in value:
+            extracted = _extract_environment_value(item)
+
+            if extracted:
+                values.append(
+                    str(extracted).strip()
+                )
+
+        return ", ".join(values)
+
+    if value is None:
+        return None
+
+    return str(value).strip()
+
+
+def _configured_labels(value):
+    """Convert one or more comma-separated configured labels to a set."""
+
+    if not value:
+        return set()
+
+    return {
+        label.strip().lower()
+        for label in str(value).split(",")
+        if label.strip()
+    }
+
+
 def get_issue_environment(
-    fields,
+    fields=None,
     environment_field=None,
     uat_label=None,
     prod_label=None,
 ):
     """
-    Determine issue environment.
+    Determine Jira issue environment.
 
-    Priority:
-    1. Configured Jira environment field
-    2. UAT label
-    3. PROD label
-    4. None
+    Production and UAT are determined independently using OR logic:
+
+        PROD = configured PROD environment value OR PROD label
+        UAT  = configured UAT environment value OR UAT label
+
+    SIT does not have its own tag/value. Anything that is neither
+    UAT nor PROD is treated as SIT by the caller/report.
+
+    The environment field is optional. When it is not configured,
+    classification falls back to labels.
     """
 
     fields = fields or {}
 
-    # ============================================================
-    # 1. ENVIRONMENT FIELD
-    # ============================================================
+    # ------------------------------------------------------------
+    # Read configured Jira environment field
+    # ------------------------------------------------------------
+
+    environment_value = None
 
     if environment_field:
-
-        environment = fields.get(
-            environment_field
+        environment_value = _extract_environment_value(
+            fields.get(environment_field)
         )
 
-        if isinstance(environment, dict):
-            environment = (
-                environment.get("value")
-                or environment.get("name")
-            )
+    normalized_environment = (
+        str(environment_value).strip().upper()
+        if environment_value
+        else None
+    )
 
-        elif isinstance(environment, list):
-
-            values = []
-
-            for item in environment:
-
-                if isinstance(item, dict):
-                    value = (
-                        item.get("value")
-                        or item.get("name")
-                    )
-                else:
-                    value = str(item)
-
-                if value:
-                    values.append(value)
-
-            environment = ", ".join(values)
-
-        if environment:
-
-            environment = str(
-                environment
-            ).strip().upper()
-
-            if environment == "UAT":
-                return "UAT"
-
-            if environment == "PROD":
-                return "PROD"
-
-    # ============================================================
-    # 2. LABEL FALLBACK
-    # ============================================================
+    # ------------------------------------------------------------
+    # Read Jira labels
+    # ------------------------------------------------------------
 
     labels = fields.get("labels") or []
 
-    if (
-        uat_label
-        and uat_label in labels
-    ):
-        return "UAT"
+    normalized_labels = {
+        str(label).strip().lower()
+        for label in labels
+        if str(label).strip()
+    }
+
+    uat_labels = _configured_labels(uat_label)
+    prod_labels = _configured_labels(prod_label)
+
+    # ------------------------------------------------------------
+    # PROD must win when either PROD source matches.
+    # This also handles an issue that has both UAT and PROD
+    # indicators: a production indicator is sufficient for PROD.
+    # ------------------------------------------------------------
 
     if (
-        prod_label
-        and prod_label in labels
+        normalized_environment == "PROD"
+        or bool(prod_labels & normalized_labels)
     ):
         return "PROD"
+
+    # ------------------------------------------------------------
+    # UAT when either UAT source matches.
+    # ------------------------------------------------------------
+
+    if (
+        normalized_environment == "UAT"
+        or bool(uat_labels & normalized_labels)
+    ):
+        return "UAT"
 
     return None
