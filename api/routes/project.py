@@ -12,7 +12,6 @@ from fastapi import File, UploadFile, HTTPException
 from sqlalchemy.orm import Session
 from io import BytesIO
 
-from app.api.routes.jira import get_issue_environment
 from app.core.database import get_db
 
 from app.models.project import Project
@@ -26,6 +25,7 @@ from app.models.jira_configuration import JiraConfiguration
 from app.services.jira_service import (
     search_jira_bugs,
     search_jira_features,
+    get_issue_environment,
 )
 
 from app.utils.status_calculator import calculate_status
@@ -426,6 +426,11 @@ async def download_project_report(
                 jira_email=jira_config.jira_email,
                 jira_api_token=jira_config.jira_api_token,
                 jql=jira_config.jql,
+                environment_field=(
+                    jira_config.environment_field
+                    if jira_config.environment_field
+                    else None
+                ),
             )
 
             issues = jira_data.get(
@@ -442,12 +447,13 @@ async def download_project_report(
                     {},
                 )
 
-                labels = fields.get(
-                    "labels"
-                ) or []
-
                 environment = get_issue_environment(
-                    labels=labels,
+                    fields=fields,
+                    environment_field=(
+                        jira_config.environment_field
+                        if jira_config.environment_field
+                        else None
+                    ),
                     uat_label=jira_config.uat_label,
                     prod_label=jira_config.prod_label,
                 )
@@ -534,7 +540,6 @@ async def download_project_report(
         },
     )
 
-```python
 @router.get(
     "/projects/{project_id}/report/html",
     response_class=HTMLResponse,
@@ -573,6 +578,10 @@ async def project_html_report(
 
     jira_issues = []
     jira_features = []
+    jira_sit_issues = []
+    jira_uat_issues = []
+    jira_prod_issues = []
+    jira_issue_environments = {}
 
     # ==========================================================
     # Jira configuration
@@ -645,13 +654,23 @@ async def project_html_report(
                     prod_label=jira_config.prod_label,
                 )
 
+                issue_key = issue.get("key")
+
+                jira_issue_environments[issue_key] = environment or "SIT"
+
                 if environment == "UAT":
 
                     jira_uat += 1
+                    jira_uat_issues.append(issue)
 
                 elif environment == "PROD":
 
                     jira_prod += 1
+                    jira_prod_issues.append(issue)
+
+                else:
+
+                    jira_sit_issues.append(issue)
 
             # --------------------------------------------------
             # Remaining bugs
@@ -719,6 +738,10 @@ async def project_html_report(
             jira_prod = 0
             jira_sit = 0
             jira_issues = []
+            jira_sit_issues = []
+            jira_uat_issues = []
+            jira_prod_issues = []
+            jira_issue_environments = {}
 
     # ==========================================================
     # Jira Features / Stories
@@ -796,6 +819,10 @@ async def project_html_report(
             # Jira details
             jira_issues=jira_issues,
             jira_features=jira_features,
+            jira_sit_issues=jira_sit_issues,
+            jira_uat_issues=jira_uat_issues,
+            jira_prod_issues=jira_prod_issues,
+            jira_issue_environments=jira_issue_environments,
         )
 
     except Exception as exc:
@@ -836,7 +863,6 @@ async def project_html_report(
         content=html,
         status_code=200,
     )
-```
 
 
 @router.post(
