@@ -21,8 +21,6 @@ export async function getAvailableMetrics(projectId) {
   return response.data;
 }
 
-
-
 export async function createProject(
   payload
 ) {
@@ -33,8 +31,6 @@ export async function createProject(
 
   return response.data;
 }
-
-
 
 export async function addMetric(
   projectId,
@@ -48,7 +44,9 @@ export async function addMetric(
   return response.data;
 }
 
-export async function getQualityScore(projectId) {
+export async function getQualityScore(
+  projectId
+) {
   const response = await apiClient.get(
     `/projects/projects/${projectId}/quality-score`
   );
@@ -56,7 +54,9 @@ export async function getQualityScore(projectId) {
   return response.data;
 }
 
-export async function getReleases(projectId) {
+export async function getReleases(
+  projectId
+) {
   const response = await apiClient.get(
     `/projects/${projectId}/releases`
   );
@@ -64,7 +64,9 @@ export async function getReleases(projectId) {
   return response.data;
 }
 
-export async function downloadProjectPdf(projectId) {
+export async function downloadProjectPdf(
+  projectId
+) {
   const response = await apiClient.get(
     `/projects/projects/${projectId}/report/pdf`,
     {
@@ -75,13 +77,23 @@ export async function downloadProjectPdf(projectId) {
   return response.data;
 }
 
+
+// ============================================================
+// PROJECT-LEVEL AUTOMATION UPLOAD
+// ============================================================
+// Kept for backward compatibility with existing uploads.
+// ============================================================
+
 export async function uploadAutomationExcel(
   projectId,
   file
 ) {
   const formData = new FormData();
 
-  formData.append("file", file);
+  formData.append(
+    "file",
+    file
+  );
 
   const response = await apiClient.post(
     `/projects/projects/${projectId}/automation/upload`,
@@ -96,6 +108,13 @@ export async function uploadAutomationExcel(
   return response.data;
 }
 
+
+// ============================================================
+// PROJECT-LEVEL LATEST AUTOMATION UPLOAD
+// ============================================================
+// Kept for backward compatibility.
+// ============================================================
+
 export async function getLatestAutomationUpload(
   projectId
 ) {
@@ -105,6 +124,57 @@ export async function getLatestAutomationUpload(
 
   return response.data;
 }
+
+
+// ============================================================
+// RELEASE-LEVEL AUTOMATION UPLOAD
+// ============================================================
+
+export async function uploadReleaseAutomationExcel(
+  projectId,
+  releaseId,
+  file
+) {
+  const formData = new FormData();
+
+  formData.append(
+    "file",
+    file
+  );
+
+  const response = await apiClient.post(
+    `/projects/projects/${projectId}/releases/${releaseId}/automation/upload`,
+    formData,
+    {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    }
+  );
+
+  return response.data;
+}
+
+
+// ============================================================
+// RELEASE-LEVEL LATEST AUTOMATION UPLOAD
+// ============================================================
+
+export async function getLatestReleaseAutomationUpload(
+  projectId,
+  releaseId
+) {
+  const response = await apiClient.get(
+    `/projects/projects/${projectId}/releases/${releaseId}/automation/uploads/latest`
+  );
+
+  return response.data;
+}
+
+
+// ============================================================
+// PROJECT HTML REPORT
+// ============================================================
 
 export async function getProjectHtmlReport(
   projectId
