@@ -64,6 +64,11 @@ export async function getReleases(
   return response.data;
 }
 
+
+// ============================================================
+// PROJECT PDF REPORT
+// ============================================================
+
 export async function downloadProjectPdf(
   projectId
 ) {
@@ -79,9 +84,27 @@ export async function downloadProjectPdf(
 
 
 // ============================================================
+// PROJECT HTML REPORT
+// ============================================================
+
+export async function downloadProjectHtml(
+  projectId
+) {
+  const response = await apiClient.get(
+    `/projects/projects/${projectId}/report/html`,
+    {
+      responseType: "text",
+    }
+  );
+
+  return response.data;
+}
+
+
+// ============================================================
 // PROJECT-LEVEL AUTOMATION UPLOAD
 // ============================================================
-// Kept for backward compatibility with existing uploads.
+// Kept for backward compatibility.
 // ============================================================
 
 export async function uploadAutomationExcel(
@@ -166,24 +189,6 @@ export async function getLatestReleaseAutomationUpload(
 ) {
   const response = await apiClient.get(
     `/projects/projects/${projectId}/releases/${releaseId}/automation/uploads/latest`
-  );
-
-  return response.data;
-}
-
-
-// ============================================================
-// PROJECT HTML REPORT
-// ============================================================
-
-export async function getProjectHtmlReport(
-  projectId
-) {
-  const response = await apiClient.get(
-    `/projects/projects/${projectId}/report/html`,
-    {
-      responseType: "text",
-    }
   );
 
   return response.data;
