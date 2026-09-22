@@ -93,7 +93,7 @@ export async function downloadProjectHtml(
   const response = await apiClient.get(
     `/projects/projects/${projectId}/report/html`,
     {
-      responseType: "text",
+      responseType: "blob",
     }
   );
 
