@@ -26,8 +26,8 @@ import {
 } from "../api/automation";
 
 import {
-  uploadAutomationExcel,
-  getLatestAutomationUpload,
+  uploadReleaseAutomationExcel,
+  getLatestReleaseAutomationUpload,
 } from "../api/projects";
 
 import AddReleaseModal from "../components/AddReleaseModal";
@@ -92,8 +92,11 @@ function AutomationDetails() {
   const [selectedFile, setSelectedFile] =
     useState(null);
 
-  const [uploading, setUploading] =
-    useState(false);
+  const [uploadingReleaseId, setUploadingReleaseId] =
+    useState(null);
+
+  const [uploadTargetReleaseId, setUploadTargetReleaseId] =
+    useState(null);
 
   const [uploadMessage, setUploadMessage] =
     useState("");
@@ -101,8 +104,8 @@ function AutomationDetails() {
   const [uploadMessageType, setUploadMessageType] =
     useState("");
 
-  const [uploadedData, setUploadedData] =
-    useState(null);
+  const [releaseUploads, setReleaseUploads] =
+    useState({});
 
 
   // ==================================================
@@ -166,193 +169,148 @@ function AutomationDetails() {
 
 
   // ==================================================
-  // Load Latest Excel Upload
+  // Load Latest Excel Uploads by Release
   // ==================================================
 
-  async function loadLatestAutomationUpload() {
+  async function loadReleaseUploads(releases = []) {
+    if (!routeProjectId) return;
 
-    if (!routeProjectId) {
-      return;
-    }
+    const uploads = {};
 
-    try {
+    await Promise.all(
+      releases.map(async (release) => {
+        try {
+          uploads[release.id] =
+            await getLatestReleaseAutomationUpload(
+              routeProjectId,
+              release.id
+            );
+        } catch (err) {
+          console.error(
+            `Failed to load automation upload for release ${release.id}:`,
+            err
+          );
+          uploads[release.id] = { upload: null, rows: [] };
+        }
+      })
+    );
 
-      const data =
-        await getLatestAutomationUpload(
-          routeProjectId
-        );
-
-      setUploadedData(data);
-
-    } catch (err) {
-
-      console.error(
-        "Failed to load automation Excel:",
-        err
-      );
-
-      setUploadedData(null);
-
-    }
-
+    setReleaseUploads(uploads);
   }
 
+  async function loadLatestAutomationUploadForRelease(releaseId) {
+    if (!routeProjectId || !releaseId) return;
+
+    try {
+      const data = await getLatestReleaseAutomationUpload(
+        routeProjectId,
+        releaseId
+      );
+
+      setReleaseUploads((previous) => ({
+        ...previous,
+        [releaseId]: data,
+      }));
+    } catch (err) {
+      console.error(
+        "Failed to reload release automation upload:",
+        err
+      );
+    }
+  }
 
   // ==================================================
   // Initial Load
   // ==================================================
 
   useEffect(() => {
-
-    if (!routeProjectId) {
-      return;
-    }
-
+    if (!routeProjectId) return;
     loadAutomation();
-    loadLatestAutomationUpload();
-
   }, [routeProjectId]);
 
+  useEffect(() => {
+    if (automation?.releases) {
+      loadReleaseUploads(automation.releases);
+    }
+  }, [automation?.releases]);
 
   // ==================================================
   // Excel File Selected
   // ==================================================
 
-  function handleExcelFileSelected(event) {
+  function handleExcelFileSelected(event, releaseId) {
+    const file = event.target.files?.[0];
+    if (!file) return;
 
-    const file =
-      event.target.files?.[0];
-
-    if (!file) {
-      return;
-    }
-
-
-    // Validate extension
-    const fileName =
-      file.name.toLowerCase();
-
-    if (!fileName.endsWith(".xlsx")) {
-
+    if (!file.name.toLowerCase().endsWith(".xlsx")) {
       setSelectedFile(null);
-
-      setUploadMessage(
-        "Please select a valid .xlsx Excel file."
-      );
-
+      setUploadTargetReleaseId(null);
+      setUploadMessage("Please select a valid .xlsx Excel file.");
       setUploadMessageType("error");
-
       return;
-
     }
 
-
-    // Clear previous message
     setUploadMessage("");
     setUploadMessageType("");
-
-
-    // Store selected file
     setSelectedFile(file);
-
-
-    // Allow selecting same file again
+    setUploadTargetReleaseId(releaseId);
     event.target.value = "";
-
   }
 
-
   // ==================================================
-  // Upload Excel
+  // Upload Excel for Release
   // ==================================================
 
-  async function handleAutomationExcelUpload() {
-
+  async function handleAutomationExcelUpload(releaseId = uploadTargetReleaseId) {
     if (!routeProjectId) {
-
-      setUploadMessage(
-        "Invalid project."
-      );
-
+      setUploadMessage("Invalid project.");
       setUploadMessageType("error");
-
       return;
-
     }
 
+    if (!releaseId) {
+      setUploadMessage("Invalid release.");
+      setUploadMessageType("error");
+      return;
+    }
 
     if (!selectedFile) {
-
-      setUploadMessage(
-        "Please select an Excel file."
-      );
-
+      setUploadMessage("Please select an Excel file.");
       setUploadMessageType("error");
-
       return;
-
     }
 
-
     try {
-
-      setUploading(true);
-
+      setUploadingReleaseId(releaseId);
       setUploadMessage("");
       setUploadMessageType("");
 
-
-      const result =
-        await uploadAutomationExcel(
-          routeProjectId,
-          selectedFile
-        );
-
+      const result = await uploadReleaseAutomationExcel(
+        routeProjectId,
+        releaseId,
+        selectedFile
+      );
 
       setUploadMessage(
         `${result.rows_imported} rows uploaded successfully.`
       );
-
       setUploadMessageType("success");
-
-
-      // Clear selected file
       setSelectedFile(null);
 
-
-      // Reload latest uploaded Excel
-      await loadLatestAutomationUpload();
-
-
+      await loadLatestAutomationUploadForRelease(releaseId);
     } catch (err) {
-
-      console.error(
-        "Automation Excel upload failed:",
-        err
-      );
-
-
+      console.error("Automation Excel upload failed:", err);
       const message =
         err?.response?.data?.detail ||
         "Excel upload failed.";
-
-
       setUploadMessage(
-        typeof message === "string"
-          ? message
-          : "Invalid Excel format."
+        typeof message === "string" ? message : "Invalid Excel format."
       );
-
       setUploadMessageType("error");
-
     } finally {
-
-      setUploading(false);
-
+      setUploadingReleaseId(null);
     }
-
   }
-
 
   // ==================================================
   // Toggle Release
@@ -860,576 +818,9 @@ function AutomationDetails() {
                   </button>
 
 
-                  {/* Upload Excel */}
-
-                  <button
-                    type="button"
-                    onClick={() => {
-
-                      document
-                        .getElementById(
-                          "automation-excel-upload"
-                        )
-                        ?.click();
-
-                    }}
-                    disabled={uploading}
-                    className="
-                      inline-flex
-                      items-center
-                      gap-2
-                      px-4
-                      py-2.5
-                      bg-blue-600
-                      text-white
-                      rounded-lg
-                      text-sm
-                      font-medium
-                      hover:bg-blue-700
-                      disabled:opacity-50
-                      disabled:cursor-not-allowed
-                    "
-                  >
-
-                    <Upload size={16} />
-
-                    Upload Excel
-
-                  </button>
-
-
-                  {/* Hidden File Input */}
-
-                  <input
-                    id="automation-excel-upload"
-                    type="file"
-                    accept=".xlsx"
-                    className="hidden"
-                    onChange={
-                      handleExcelFileSelected
-                    }
-                  />
-
                 </div>
 
               </div>
-
-
-              {/* ==================================================
-                  Selected Excel File
-                  ================================================== */}
-
-              {(selectedFile || uploadMessage) && (
-
-                <div
-                  className="
-                    px-6
-                    py-3
-                    bg-gray-50
-                    border-b
-                    border-gray-200
-                    flex
-                    items-center
-                    justify-between
-                    gap-4
-                  "
-                >
-
-                  <div
-                    className="
-                      flex
-                      items-center
-                      gap-3
-                      min-w-0
-                    "
-                  >
-
-                    {selectedFile && (
-
-                      <div
-                        className="
-                          text-sm
-                          text-gray-600
-                          truncate
-                        "
-                      >
-
-                        <span
-                          className="
-                            font-medium
-                            text-gray-800
-                          "
-                        >
-                          Selected file:
-                        </span>{" "}
-
-                        {selectedFile.name}
-
-                      </div>
-
-                    )}
-
-
-                    {uploadMessage && (
-
-                      <div
-                        className={`
-                          text-sm
-                          ${
-                            uploadMessageType === "error"
-                              ? "text-red-600"
-                              : "text-green-600"
-                          }
-                        `}
-                      >
-                        {uploadMessage}
-                      </div>
-
-                    )}
-
-                  </div>
-
-
-                  {selectedFile && (
-
-                    <button
-                      type="button"
-                      onClick={
-                        handleAutomationExcelUpload
-                      }
-                      disabled={uploading}
-                      className="
-                        inline-flex
-                        items-center
-                        gap-2
-                        px-3
-                        py-2
-                        bg-green-600
-                        text-white
-                        rounded-lg
-                        text-sm
-                        font-medium
-                        hover:bg-green-700
-                        disabled:opacity-50
-                        disabled:cursor-not-allowed
-                        flex-shrink-0
-                      "
-                    >
-
-                      <Upload size={15} />
-
-                      {uploading
-                        ? "Uploading..."
-                        : "Upload Selected File"}
-
-                    </button>
-
-                  )}
-
-                </div>
-
-              )}
-
-
-              {/* ==================================================
-                  Latest Uploaded Excel
-                  ================================================== */}
-
-              {uploadedData?.upload && (
-
-                <div
-                  className="
-                    border-b
-                    border-gray-200
-                  "
-                >
-
-                  {/* Upload Information */}
-
-                  <div
-                    className="
-                      px-6
-                      py-4
-                      bg-blue-50
-                      border-b
-                      border-blue-100
-                    "
-                  >
-
-                    <div
-                      className="
-                        flex
-                        items-center
-                        justify-between
-                        gap-4
-                      "
-                    >
-
-                      <div>
-
-                        <h3
-                          className="
-                            text-sm
-                            font-semibold
-                            text-gray-900
-                          "
-                        >
-                          Latest Automation Upload
-                        </h3>
-
-                        <div
-                          className="
-                            flex
-                            flex-wrap
-                            items-center
-                            gap-x-6
-                            gap-y-1
-                            mt-2
-                            text-xs
-                            text-gray-600
-                          "
-                        >
-
-                          <span>
-
-                            <strong>
-                              File:
-                            </strong>{" "}
-
-                            {uploadedData.upload.filename}
-
-                          </span>
-
-
-                          <span>
-
-                            <strong>
-                              Records:
-                            </strong>{" "}
-
-                            {uploadedData.upload.row_count}
-
-                          </span>
-
-
-                          <span>
-
-                            <strong>
-                              Uploaded:
-                            </strong>{" "}
-
-                            {new Date(
-                              uploadedData
-                                .upload
-                                .uploaded_at
-                            ).toLocaleString()}
-
-                          </span>
-
-                        </div>
-
-                      </div>
-
-                    </div>
-
-                  </div>
-
-
-                  {/* Uploaded Excel Table */}
-
-                  <div
-                    className="
-                      overflow-x-auto
-                    "
-                  >
-
-                    <table
-                      className="
-                        w-full
-                        text-sm
-                        min-w-[1000px]
-                      "
-                    >
-
-                      <thead>
-
-                        <tr
-                          className="
-                            bg-gray-50
-                            border-b
-                            border-gray-200
-                          "
-                        >
-
-                          <th
-                            className="
-                              px-5
-                              py-3
-                              text-left
-                              font-semibold
-                              text-gray-700
-                              whitespace-nowrap
-                            "
-                          >
-                            S. No.
-                          </th>
-
-
-                          <th
-                            className="
-                              px-5
-                              py-3
-                              text-left
-                              font-semibold
-                              text-gray-700
-                              whitespace-nowrap
-                            "
-                          >
-                            Jira ID
-                          </th>
-
-
-                          <th
-                            className="
-                              px-5
-                              py-3
-                              text-left
-                              font-semibold
-                              text-gray-700
-                              whitespace-nowrap
-                            "
-                          >
-                            Test Case ID
-                          </th>
-
-
-                          <th
-                            className="
-                              px-5
-                              py-3
-                              text-left
-                              font-semibold
-                              text-gray-700
-                              whitespace-nowrap
-                            "
-                          >
-                            Owner
-                          </th>
-
-
-                          <th
-                            className="
-                              px-5
-                              py-3
-                              text-left
-                              font-semibold
-                              text-gray-700
-                              min-w-[300px]
-                            "
-                          >
-                            Test Case Description
-                          </th>
-
-
-                          <th
-                            className="
-                              px-5
-                              py-3
-                              text-left
-                              font-semibold
-                              text-gray-700
-                              whitespace-nowrap
-                            "
-                          >
-                            Status
-                          </th>
-
-
-                          <th
-                            className="
-                              px-5
-                              py-3
-                              text-center
-                              font-semibold
-                              text-gray-700
-                              whitespace-nowrap
-                            "
-                          >
-                            Automat-able
-                          </th>
-
-
-                          <th
-                            className="
-                              px-5
-                              py-3
-                              text-center
-                              font-semibold
-                              text-gray-700
-                              whitespace-nowrap
-                            "
-                          >
-                            Automated
-                          </th>
-
-                        </tr>
-
-                      </thead>
-
-
-                      <tbody>
-
-                        {(uploadedData.rows || [])
-                          .map((row) => (
-
-                            <tr
-                              key={row.id}
-                              className="
-                                border-b
-                                border-gray-100
-                                hover:bg-gray-50
-                              "
-                            >
-
-                              <td
-                                className="
-                                  px-5
-                                  py-3
-                                  text-gray-700
-                                "
-                              >
-                                {row.sno ?? "-"}
-                              </td>
-
-
-                              <td
-                                className="
-                                  px-5
-                                  py-3
-                                  text-gray-700
-                                "
-                              >
-                                {row.jira_id || "-"}
-                              </td>
-
-
-                              <td
-                                className="
-                                  px-5
-                                  py-3
-                                  font-medium
-                                  text-gray-900
-                                "
-                              >
-                                {row.test_case_id}
-                              </td>
-
-
-                              <td
-                                className="
-                                  px-5
-                                  py-3
-                                  text-gray-700
-                                "
-                              >
-                                {row.owner || "-"}
-                              </td>
-
-
-                              <td
-                                className="
-                                  px-5
-                                  py-3
-                                  text-gray-700
-                                  max-w-[450px]
-                                "
-                              >
-                                <div
-                                  className="
-                                    truncate
-                                  "
-                                  title={
-                                    row.test_case_description ||
-                                    ""
-                                  }
-                                >
-                                  {
-                                    row.test_case_description ||
-                                    "-"
-                                  }
-                                </div>
-                              </td>
-
-
-                              <td
-                                className="
-                                  px-5
-                                  py-3
-                                  text-gray-700
-                                "
-                              >
-                                {row.status || "-"}
-                              </td>
-
-
-                              <td
-                                className="
-                                  px-5
-                                  py-3
-                                  text-center
-                                  font-medium
-                                "
-                              >
-                                {row.automatable || "-"}
-                              </td>
-
-
-                              <td
-                                className="
-                                  px-5
-                                  py-3
-                                  text-center
-                                  font-medium
-                                "
-                              >
-                                {row.automated || "-"}
-                              </td>
-
-                            </tr>
-
-                          ))}
-
-
-                        {(!uploadedData.rows ||
-                          uploadedData.rows.length === 0) && (
-
-                          <tr>
-
-                            <td
-                              colSpan="8"
-                              className="
-                                px-6
-                                py-8
-                                text-center
-                                text-gray-500
-                              "
-                            >
-                              No records found in the latest Excel upload.
-                            </td>
-
-                          </tr>
-
-                        )}
-
-                      </tbody>
-
-                    </table>
-
-                  </div>
-
-                </div>
-
-              )}
 
 
               {/* ==================================================
@@ -1717,11 +1108,120 @@ function AutomationDetails() {
 
                                   </button>
 
+                                  {/* Upload Test Cases */}
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        document
+                                          .getElementById(
+                                            `automation-excel-upload-${release.id}`
+                                          )
+                                          ?.click()
+                                      }
+                                      disabled={uploadingReleaseId !== null}
+                                      className="inline-flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+                                    >
+                                      <Upload size={14} />
+                                      {uploadingReleaseId === release.id
+                                        ? "Uploading..."
+                                        : "Upload Test Cases"}
+                                    </button>
+
+                                    <input
+                                      id={`automation-excel-upload-${release.id}`}
+                                      type="file"
+                                      accept=".xlsx"
+                                      className="hidden"
+                                      onChange={(event) =>
+                                        handleExcelFileSelected(
+                                          event,
+                                          release.id
+                                        )
+                                      }
+                                    />
+                                  </div>
+
                                 </div>
 
                               </td>
 
                             </tr>
+
+                            {uploadTargetReleaseId === release.id &&
+                              (selectedFile || uploadMessage) && (
+                                <tr className="bg-gray-50 border-b border-gray-200">
+                                  <td colSpan="8" className="px-5 py-3">
+                                    <div className="flex items-center justify-between gap-4">
+                                      <div className="min-w-0">
+                                        {selectedFile && (
+                                          <div className="text-sm text-gray-700 truncate">
+                                            <span className="font-medium">Selected file:</span>{" "}{selectedFile.name}
+                                          </div>
+                                        )}
+                                        {uploadMessage && (
+                                          <div className={`text-sm mt-1 ${uploadMessageType === "error" ? "text-red-600" : "text-green-600"}`}>
+                                            {uploadMessage}
+                                          </div>
+                                        )}
+                                      </div>
+                                      {selectedFile && (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleAutomationExcelUpload(release.id)}
+                                          disabled={uploadingReleaseId !== null}
+                                          className="inline-flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50 flex-shrink-0"
+                                        >
+                                          <Upload size={15} />
+                                          {uploadingReleaseId === release.id ? "Uploading..." : "Upload Selected File"}
+                                        </button>
+                                      )}
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+
+                            {releaseUploads[release.id]?.upload && expanded && (
+                              <tr className="bg-blue-50/50 border-b border-blue-100">
+                                <td colSpan="8" className="px-5 py-3">
+                                  <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-xs text-gray-600 mb-3">
+                                    <span><strong>Latest Upload:</strong> {releaseUploads[release.id].upload.filename}</span>
+                                    <span><strong>Records:</strong> {releaseUploads[release.id].upload.row_count}</span>
+                                    <span><strong>Uploaded:</strong> {new Date(releaseUploads[release.id].upload.uploaded_at).toLocaleString()}</span>
+                                  </div>
+                                  <div className="overflow-x-auto">
+                                    <table className="w-full text-xs min-w-[900px]">
+                                      <thead>
+                                        <tr className="border-b border-gray-200 text-gray-600">
+                                          <th className="px-3 py-2 text-left">S. No.</th>
+                                          <th className="px-3 py-2 text-left">Jira ID</th>
+                                          <th className="px-3 py-2 text-left">Test Case ID</th>
+                                          <th className="px-3 py-2 text-left">Owner</th>
+                                          <th className="px-3 py-2 text-left">Description</th>
+                                          <th className="px-3 py-2 text-left">Status</th>
+                                          <th className="px-3 py-2 text-center">Automat-able</th>
+                                          <th className="px-3 py-2 text-center">Automated</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {(releaseUploads[release.id].rows || []).map((row) => (
+                                          <tr key={row.id} className="border-b border-gray-100 hover:bg-white">
+                                            <td className="px-3 py-2">{row.sno ?? "-"}</td>
+                                            <td className="px-3 py-2">{row.jira_id || "-"}</td>
+                                            <td className="px-3 py-2 font-medium">{row.test_case_id}</td>
+                                            <td className="px-3 py-2">{row.owner || "-"}</td>
+                                            <td className="px-3 py-2 max-w-[350px] truncate" title={row.test_case_description || ""}>{row.test_case_description || "-"}</td>
+                                            <td className="px-3 py-2">{row.status || "-"}</td>
+                                            <td className="px-3 py-2 text-center">{row.automatable || "-"}</td>
+                                            <td className="px-3 py-2 text-center">{row.automated || "-"}</td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
 
 
                             {/* POD Rows */}
