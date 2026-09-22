@@ -1312,3 +1312,321 @@ def get_latest_automation_upload(
             for row in rows
         ],
     }
+
+@router.post(
+    "/projects/{project_id}/releases/{release_id}/automation/upload"
+)
+async def upload_release_automation_excel(
+    project_id: int,
+    release_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    # ==================================================
+    # Validate Project
+    # ==================================================
+    project = (
+        db.query(Project)
+        .filter(
+            Project.id == project_id,
+            Project.active.is_(True),
+        )
+        .first()
+    )
+
+    if not project:
+        raise HTTPException(
+            status_code=404,
+            detail="Project not found",
+        )
+
+    # ==================================================
+    # Validate Release belongs to Project
+    # ==================================================
+    release = (
+        db.query(AutomationRelease)
+        .filter(
+            AutomationRelease.id == release_id,
+            AutomationRelease.project_id == project_id,
+        )
+        .first()
+    )
+
+    if not release:
+        raise HTTPException(
+            status_code=404,
+            detail="Release not found for this project",
+        )
+
+    # ==================================================
+    # Validate File
+    # ==================================================
+    if not file.filename:
+        raise HTTPException(
+            status_code=400,
+            detail="Please select an Excel file.",
+        )
+
+    if not file.filename.lower().endswith(".xlsx"):
+        raise HTTPException(
+            status_code=400,
+            detail="Only .xlsx Excel files are supported.",
+        )
+
+    REQUIRED_AUTOMATION_COLUMNS = [
+        "S. No.",
+        "Comment",
+        "Owner",
+        "Jira ID",
+        "Test case ID",
+        "Pre Condition",
+        "Test Case Description",
+        "Steps",
+        "Expected Result",
+        "Status",
+        "Automat-able",
+        "Automated",
+    ]
+
+    # ==================================================
+    # Read ALL Excel Sheets
+    # ==================================================
+    try:
+        file_content = await file.read()
+
+        if not file_content:
+            raise HTTPException(
+                status_code=400,
+                detail="Uploaded Excel file is empty.",
+            )
+
+        sheets = pd.read_excel(
+            BytesIO(file_content),
+            sheet_name=None,
+            engine="openpyxl",
+        )
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unable to read Excel file: {str(exc)}",
+        )
+
+    # ==================================================
+    # Validate and Combine Sheets
+    # ==================================================
+    combined_dataframes = []
+    invalid_sheets = []
+
+    for sheet_name, sheet_df in sheets.items():
+        sheet_df.columns = [
+            str(column).strip()
+            for column in sheet_df.columns
+        ]
+
+        missing_columns = (
+            set(REQUIRED_AUTOMATION_COLUMNS)
+            - set(sheet_df.columns)
+        )
+
+        if missing_columns:
+            invalid_sheets.append(
+                {
+                    "sheet": sheet_name,
+                    "missing_columns": sorted(missing_columns),
+                }
+            )
+            continue
+
+        sheet_df = sheet_df.dropna(how="all")
+
+        if sheet_df.empty:
+            continue
+
+        sheet_df = sheet_df[REQUIRED_AUTOMATION_COLUMNS]
+        sheet_df["_sheet_name"] = sheet_name
+        combined_dataframes.append(sheet_df)
+
+    if invalid_sheets:
+        details = [
+            f"Sheet '{item['sheet']}' is missing columns: "
+            f"{', '.join(item['missing_columns'])}"
+            for item in invalid_sheets
+        ]
+
+        raise HTTPException(
+            status_code=400,
+            detail="; ".join(details),
+        )
+
+    if not combined_dataframes:
+        raise HTTPException(
+            status_code=400,
+            detail="No valid automation records found in the Excel file.",
+        )
+
+    df = pd.concat(
+        combined_dataframes,
+        ignore_index=True,
+    )
+
+    def clean_value(value):
+        if pd.isna(value):
+            return None
+        return str(value).strip()
+
+    # ==================================================
+    # Create Release Upload Batch
+    # ==================================================
+    upload_batch = AutomationUploadBatch(
+        project_id=project_id,
+        release_id=release_id,
+        filename=file.filename,
+        row_count=0,
+    )
+
+    db.add(upload_batch)
+    db.flush()
+
+    rows_imported = 0
+
+    for _, row in df.iterrows():
+        test_case_id = clean_value(row["Test case ID"])
+
+        if not test_case_id:
+            continue
+
+        sno = None
+        sno_value = row["S. No."]
+
+        if not pd.isna(sno_value):
+            try:
+                sno = int(float(sno_value))
+            except (ValueError, TypeError):
+                sno = None
+
+        test_case = UploadedTestCase(
+            upload_batch_id=upload_batch.id,
+            project_id=project_id,
+            sno=sno,
+            comment=clean_value(row["Comment"]),
+            owner=clean_value(row["Owner"]),
+            jira_id=clean_value(row["Jira ID"]),
+            test_case_id=test_case_id,
+            pre_condition=clean_value(row["Pre Condition"]),
+            test_case_description=clean_value(
+                row["Test Case Description"]
+            ),
+            steps=clean_value(row["Steps"]),
+            expected_result=clean_value(row["Expected Result"]),
+            status=clean_value(row["Status"]),
+            automatable=clean_value(row["Automat-able"]),
+            automated=clean_value(row["Automated"]),
+            sheet_name=clean_value(row["_sheet_name"]),
+        )
+
+        db.add(test_case)
+        rows_imported += 1
+
+    upload_batch.row_count = rows_imported
+
+    try:
+        db.commit()
+        db.refresh(upload_batch)
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to save Excel data: {str(exc)}",
+        )
+
+    return {
+        "message": "Automation Excel uploaded successfully.",
+        "project_id": project_id,
+        "release_id": release_id,
+        "upload_batch_id": upload_batch.id,
+        "filename": file.filename,
+        "sheets_processed": len(sheets),
+        "rows_imported": rows_imported,
+    }
+
+
+@router.get(
+    "/projects/{project_id}/releases/{release_id}/automation/uploads/latest"
+)
+def get_latest_release_automation_upload(
+    project_id: int,
+    release_id: int,
+    db: Session = Depends(get_db),
+):
+    project = (
+        db.query(Project)
+        .filter(
+            Project.id == project_id,
+            Project.active.is_(True),
+        )
+        .first()
+    )
+
+    if not project:
+        raise HTTPException(
+            status_code=404,
+            detail="Project not found",
+        )
+
+    release = (
+        db.query(AutomationRelease)
+        .filter(
+            AutomationRelease.id == release_id,
+            AutomationRelease.project_id == project_id,
+        )
+        .first()
+    )
+
+    if not release:
+        raise HTTPException(
+            status_code=404,
+            detail="Release not found for this project",
+        )
+
+    upload_batch = (
+        db.query(AutomationUploadBatch)
+        .filter(
+            AutomationUploadBatch.project_id == project_id,
+            AutomationUploadBatch.release_id == release_id,
+        )
+        .order_by(
+            AutomationUploadBatch.uploaded_at.desc()
+        )
+        .first()
+    )
+
+    if not upload_batch:
+        return {
+            "upload": None,
+            "rows": [],
+        }
+
+    rows = (
+        db.query(UploadedTestCase)
+        .filter(
+            UploadedTestCase.upload_batch_id == upload_batch.id
+        )
+        .order_by(
+            UploadedTestCase.sno,
+            UploadedTestCase.id,
+        )
+        .all()
+    )
+
+    return {
+        "upload": AutomationUploadBatchResponse.model_validate(
+            upload_batch
+        ),
+        "rows": [
+            UploadedTestCaseResponse.model_validate(row)
+            for row in rows
+        ],
+    }
