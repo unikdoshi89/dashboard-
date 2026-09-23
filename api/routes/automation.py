@@ -9,11 +9,15 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 
 from app.models.project import Project
+
 from app.models.automation_release import (
     AutomationRelease,
 )
+
 from app.models.automation_detail import (
     AutomationDetail,
+    AutomationUploadBatch,
+    UploadedTestCase,
 )
 
 from app.schemas.automation import (
@@ -30,6 +34,178 @@ router = APIRouter(
     tags=["Automation"],
 )
 
+
+# ============================================================
+# Helpers
+# ============================================================
+
+def is_positive_value(value) -> bool:
+    """
+    Determine whether an uploaded Excel value represents YES.
+
+    Supported values:
+        Yes
+        YES
+        Y
+        True
+        TRUE
+        1
+        1.0
+    """
+
+    if value is None:
+        return False
+
+    normalized = str(value).strip().lower()
+
+    return normalized in {
+        "yes",
+        "y",
+        "true",
+        "1",
+        "1.0",
+    }
+
+
+def get_latest_release_upload(
+    release_id: int,
+    db: Session,
+):
+    """
+    Get the latest automation Excel upload
+    for a specific release.
+    """
+
+    return (
+        db.query(AutomationUploadBatch)
+        .filter(
+            AutomationUploadBatch.release_id
+            == release_id
+        )
+        .order_by(
+            AutomationUploadBatch.uploaded_at.desc(),
+            AutomationUploadBatch.id.desc(),
+        )
+        .first()
+    )
+
+
+def calculate_upload_metrics(
+    upload_batch,
+    db: Session,
+):
+    """
+    Calculate automation metrics from the latest
+    uploaded Excel for a release.
+
+    Returns:
+
+        requirements_rtb
+        test_cases
+        automatable
+        automated
+        jira_ids
+    """
+
+    rows = (
+        db.query(UploadedTestCase)
+        .filter(
+            UploadedTestCase.upload_batch_id
+            == upload_batch.id
+        )
+        .order_by(
+            UploadedTestCase.sno,
+            UploadedTestCase.id,
+        )
+        .all()
+    )
+
+    # ========================================================
+    # Requirements + RTB
+    #
+    # Unique non-empty Jira IDs
+    # ========================================================
+
+    jira_ids = set()
+
+    for row in rows:
+
+        jira_id = row.jira_id
+
+        if jira_id is None:
+            continue
+
+        jira_id = str(
+            jira_id
+        ).strip()
+
+        if jira_id:
+            jira_ids.add(
+                jira_id
+            )
+
+    requirements_rtb = len(
+        jira_ids
+    )
+
+    # ========================================================
+    # Test Cases
+    # ========================================================
+
+    test_cases = len(
+        rows
+    )
+
+    # ========================================================
+    # Automatable / Automated
+    # ========================================================
+
+    automatable = 0
+    automated = 0
+
+    for row in rows:
+
+        if is_positive_value(
+            row.automatable
+        ):
+            automatable += 1
+
+        if is_positive_value(
+            row.automated
+        ):
+            automated += 1
+
+    # ========================================================
+    # Automation Percentage
+    # ========================================================
+
+    automation_percentage = (
+        round(
+            (
+                automated
+                / automatable
+            ) * 100,
+            2,
+        )
+        if automatable > 0
+        else None
+    )
+
+    return {
+        "requirements_rtb": requirements_rtb,
+        "test_cases": test_cases,
+        "automatable": automatable,
+        "automated": automated,
+        "automation_percentage":
+            automation_percentage,
+        "jira_ids": jira_ids,
+    }
+
+
+# ============================================================
+# Automation Details
+# ============================================================
+
 @router.get(
     "/{project_id}/automation"
 )
@@ -37,6 +213,10 @@ def get_automation_details(
     project_id: int,
     db: Session = Depends(get_db),
 ):
+
+    # ========================================================
+    # Validate Project
+    # ========================================================
 
     project = (
         db.query(Project)
@@ -53,6 +233,9 @@ def get_automation_details(
             detail="Project not found",
         )
 
+    # ========================================================
+    # Get Releases
+    # ========================================================
 
     releases = (
         db.query(AutomationRelease)
@@ -67,16 +250,32 @@ def get_automation_details(
         .all()
     )
 
-
     result = []
 
-    total_requirements = 0
+    # ========================================================
+    # Project totals
+    # ========================================================
+
     total_test_cases = 0
     total_automatable = 0
     total_automated = 0
 
+    # Unique Jira IDs across uploaded releases
+    uploaded_jira_ids = set()
+
+    # Requirements from releases which don't
+    # have an uploaded Excel
+    manual_requirements = 0
+
+    # ========================================================
+    # Process Releases
+    # ========================================================
 
     for release in releases:
+
+        # ----------------------------------------------------
+        # Get POD details
+        # ----------------------------------------------------
 
         details = (
             db.query(AutomationDetail)
@@ -90,79 +289,288 @@ def get_automation_details(
             .all()
         )
 
-
         pod_data = []
 
+        # ----------------------------------------------------
+        # Existing POD totals
+        # ----------------------------------------------------
+
+        pod_requirements = 0
+        pod_test_cases = 0
+        pod_automatable = 0
+        pod_automated = 0
 
         for detail in details:
 
-            total_requirements += (
+            requirements = (
                 detail.requirements_rtb
+                or 0
             )
 
-            total_test_cases += (
+            test_cases = (
                 detail.test_cases
+                or 0
             )
 
-            total_automatable += (
+            automatable = (
                 detail.automatable
+                or 0
             )
 
-            total_automated += (
+            automated = (
                 detail.automated
+                or 0
             )
 
-
-            pod_data.append({
-
-                "id": detail.id,
-
-                "pod": detail.pod,
-
-                "requirements_rtb":
-                    detail.requirements_rtb,
-
-                "test_cases":
-                    detail.test_cases,
-
-                "automatable":
-                    detail.automatable,
-
-                "automated":
-                    detail.automated,
-
-                "automation_percentage":
+            automation_percentage = (
+                round(
                     (
-                        round(
-                            (
-                                detail.automated
-                                / detail.automatable
-                            ) * 100,
-                            2,
-                        )
-                        if detail.automatable > 0
-                        else None
-                    ),
-            })
+                        automated
+                        / automatable
+                    ) * 100,
+                    2,
+                )
+                if automatable > 0
+                else None
+            )
 
+            pod_data.append(
+                {
+                    "id": detail.id,
 
-        result.append({
+                    "pod": detail.pod,
 
-            "id": release.id,
+                    "requirements_rtb":
+                        requirements,
 
-            "release_name":
-                release.release_name,
+                    "test_cases":
+                        test_cases,
 
-            "release_order":
-                release.release_order,
+                    "automatable":
+                        automatable,
 
-            "pods": pod_data,
+                    "automated":
+                        automated,
 
-        })
+                    "automation_percentage":
+                        automation_percentage,
+                }
+            )
 
+            pod_requirements += (
+                requirements
+            )
+
+            pod_test_cases += (
+                test_cases
+            )
+
+            pod_automatable += (
+                automatable
+            )
+
+            pod_automated += (
+                automated
+            )
+
+        # ====================================================
+        # Check latest Excel upload
+        # ====================================================
+
+        latest_upload = (
+            get_latest_release_upload(
+                release_id=release.id,
+                db=db,
+            )
+        )
+
+        # ====================================================
+        # Uploaded Excel exists
+        # ====================================================
+
+        if latest_upload:
+
+            metrics = (
+                calculate_upload_metrics(
+                    upload_batch=latest_upload,
+                    db=db,
+                )
+            )
+
+            release_requirements = (
+                metrics[
+                    "requirements_rtb"
+                ]
+            )
+
+            release_test_cases = (
+                metrics[
+                    "test_cases"
+                ]
+            )
+
+            release_automatable = (
+                metrics[
+                    "automatable"
+                ]
+            )
+
+            release_automated = (
+                metrics[
+                    "automated"
+                ]
+            )
+
+            release_percentage = (
+                metrics[
+                    "automation_percentage"
+                ]
+            )
+
+            # Add Jira IDs to project-wide set
+            uploaded_jira_ids.update(
+                metrics[
+                    "jira_ids"
+                ]
+            )
+
+        # ====================================================
+        # No Excel upload
+        #
+        # Keep existing POD behaviour.
+        # ====================================================
+
+        else:
+
+            release_requirements = (
+                pod_requirements
+            )
+
+            release_test_cases = (
+                pod_test_cases
+            )
+
+            release_automatable = (
+                pod_automatable
+            )
+
+            release_automated = (
+                pod_automated
+            )
+
+            release_percentage = (
+                round(
+                    (
+                        release_automated
+                        / release_automatable
+                    ) * 100,
+                    2,
+                )
+                if release_automatable > 0
+                else None
+            )
+
+            # These requirements are already manually
+            # maintained, so they are added to the
+            # project total separately.
+            manual_requirements += (
+                release_requirements
+            )
+
+        # ====================================================
+        # Project totals
+        # ====================================================
+
+        total_test_cases += (
+            release_test_cases
+        )
+
+        total_automatable += (
+            release_automatable
+        )
+
+        total_automated += (
+            release_automated
+        )
+
+        # ====================================================
+        # Release result
+        # ====================================================
+
+        result.append(
+            {
+                "id": release.id,
+
+                "release_name":
+                    release.release_name,
+
+                "release_order":
+                    release.release_order,
+
+                "pods":
+                    pod_data,
+
+                "total":
+                    {
+                        "requirements_rtb":
+                            release_requirements,
+
+                        "test_cases":
+                            release_test_cases,
+
+                        "automatable":
+                            release_automatable,
+
+                        "automated":
+                            release_automated,
+
+                        "automation_percentage":
+                            release_percentage,
+                    },
+
+                # Useful for frontend
+                "has_upload":
+                    latest_upload is not None,
+
+                "upload":
+                    {
+                        "id":
+                            latest_upload.id,
+
+                        "filename":
+                            latest_upload.filename,
+
+                        "row_count":
+                            latest_upload.row_count,
+
+                        "uploaded_at":
+                            latest_upload.uploaded_at,
+                    }
+                    if latest_upload
+                    else None,
+            }
+        )
+
+    # ========================================================
+    # Project Requirements + RTB
+    #
+    # Uploaded releases:
+    #     unique Jira IDs
+    #
+    # Releases without uploads:
+    #     existing manual requirement count
+    # ========================================================
+
+    total_requirements = (
+        len(uploaded_jira_ids)
+        + manual_requirements
+    )
+
+    # ========================================================
+    # Overall Automation Coverage
+    # ========================================================
 
     overall_percentage = (
-
         round(
             (
                 total_automated
@@ -170,27 +578,30 @@ def get_automation_details(
             ) * 100,
             2,
         )
-
         if total_automatable > 0
         else None
-
     )
 
+    # ========================================================
+    # Response
+    # ========================================================
 
     return {
 
         "project": {
 
-            "id": project.id,
+            "id":
+                project.id,
 
-            "name": project.name,
+            "name":
+                project.name,
 
             "project_key":
                 project.project_key,
-
         },
 
-        "releases": result,
+        "releases":
+            result,
 
         "totals": {
 
@@ -208,10 +619,13 @@ def get_automation_details(
 
             "automation_percentage":
                 overall_percentage,
-
         },
-
     }
+
+
+# ============================================================
+# Automation Summary
+# ============================================================
 
 @router.get(
     "/{project_id}/automation/summary"
@@ -220,22 +634,35 @@ def get_automation_summary(
     project_id: int,
     db: Session = Depends(get_db),
 ):
+
+    # ========================================================
+    # Validate Project
+    # ========================================================
+
     project = (
         db.query(Project)
-        .filter(Project.id == project_id)
+        .filter(
+            Project.id == project_id
+        )
         .first()
     )
 
     if not project:
+
         raise HTTPException(
             status_code=404,
             detail="Project not found",
         )
 
+    # ========================================================
+    # Get Releases
+    # ========================================================
+
     releases = (
         db.query(AutomationRelease)
         .filter(
-            AutomationRelease.project_id == project_id
+            AutomationRelease.project_id
+            == project_id
         )
         .order_by(
             AutomationRelease.release_order,
@@ -246,17 +673,28 @@ def get_automation_summary(
 
     result = []
 
-    total_requirements = 0
     total_test_cases = 0
     total_automatable = 0
     total_automated = 0
 
+    uploaded_jira_ids = set()
+    manual_requirements = 0
+
+    # ========================================================
+    # Process Releases
+    # ========================================================
+
     for release in releases:
+
+        # ----------------------------------------------------
+        # Existing POD details
+        # ----------------------------------------------------
 
         details = (
             db.query(AutomationDetail)
             .filter(
-                AutomationDetail.release_id == release.id
+                AutomationDetail.release_id
+                == release.id
             )
             .order_by(
                 AutomationDetail.id
@@ -266,21 +704,39 @@ def get_automation_summary(
 
         pod_data = []
 
-        release_requirements = 0
-        release_test_cases = 0
-        release_automatable = 0
-        release_automated = 0
+        pod_requirements = 0
+        pod_test_cases = 0
+        pod_automatable = 0
+        pod_automated = 0
 
         for detail in details:
 
-            requirements = detail.requirements_rtb or 0
-            test_cases = detail.test_cases or 0
-            automatable = detail.automatable or 0
-            automated = detail.automated or 0
+            requirements = (
+                detail.requirements_rtb
+                or 0
+            )
+
+            test_cases = (
+                detail.test_cases
+                or 0
+            )
+
+            automatable = (
+                detail.automatable
+                or 0
+            )
+
+            automated = (
+                detail.automated
+                or 0
+            )
 
             automation_percentage = (
                 round(
-                    (automated / automatable) * 100,
+                    (
+                        automated
+                        / automatable
+                    ) * 100,
                     2,
                 )
                 if automatable > 0
@@ -289,59 +745,204 @@ def get_automation_summary(
 
             pod_data.append(
                 {
-                    "id": detail.id,
-                    "pod": detail.pod,
-                    "requirements_rtb": requirements,
-                    "test_cases": test_cases,
-                    "automatable": automatable,
-                    "automated": automated,
+                    "id":
+                        detail.id,
+
+                    "pod":
+                        detail.pod,
+
+                    "requirements_rtb":
+                        requirements,
+
+                    "test_cases":
+                        test_cases,
+
+                    "automatable":
+                        automatable,
+
+                    "automated":
+                        automated,
+
                     "automation_percentage":
                         automation_percentage,
                 }
             )
 
-            release_requirements += requirements
-            release_test_cases += test_cases
-            release_automatable += automatable
-            release_automated += automated
-
-        release_percentage = (
-            round(
-                (
-                    release_automated
-                    / release_automatable
-                ) * 100,
-                2,
+            pod_requirements += (
+                requirements
             )
-            if release_automatable > 0
-            else None
+
+            pod_test_cases += (
+                test_cases
+            )
+
+            pod_automatable += (
+                automatable
+            )
+
+            pod_automated += (
+                automated
+            )
+
+        # ====================================================
+        # Latest release-level upload
+        # ====================================================
+
+        latest_upload = (
+            get_latest_release_upload(
+                release_id=release.id,
+                db=db,
+            )
         )
+
+        if latest_upload:
+
+            metrics = (
+                calculate_upload_metrics(
+                    upload_batch=latest_upload,
+                    db=db,
+                )
+            )
+
+            release_requirements = (
+                metrics[
+                    "requirements_rtb"
+                ]
+            )
+
+            release_test_cases = (
+                metrics[
+                    "test_cases"
+                ]
+            )
+
+            release_automatable = (
+                metrics[
+                    "automatable"
+                ]
+            )
+
+            release_automated = (
+                metrics[
+                    "automated"
+                ]
+            )
+
+            release_percentage = (
+                metrics[
+                    "automation_percentage"
+                ]
+            )
+
+            uploaded_jira_ids.update(
+                metrics[
+                    "jira_ids"
+                ]
+            )
+
+        else:
+
+            release_requirements = (
+                pod_requirements
+            )
+
+            release_test_cases = (
+                pod_test_cases
+            )
+
+            release_automatable = (
+                pod_automatable
+            )
+
+            release_automated = (
+                pod_automated
+            )
+
+            release_percentage = (
+                round(
+                    (
+                        release_automated
+                        / release_automatable
+                    ) * 100,
+                    2,
+                )
+                if release_automatable > 0
+                else None
+            )
+
+            manual_requirements += (
+                release_requirements
+            )
+
+        # ====================================================
+        # Project totals
+        # ====================================================
+
+        total_test_cases += (
+            release_test_cases
+        )
+
+        total_automatable += (
+            release_automatable
+        )
+
+        total_automated += (
+            release_automated
+        )
+
+        # ====================================================
+        # Release result
+        # ====================================================
 
         result.append(
             {
-                "id": release.id,
-                "release_name": release.release_name,
-                "release_order": release.release_order,
-                "pods": pod_data,
-                "total": {
-                    "requirements_rtb":
-                        release_requirements,
-                    "test_cases":
-                        release_test_cases,
-                    "automatable":
-                        release_automatable,
-                    "automated":
-                        release_automated,
-                    "automation_percentage":
-                        release_percentage,
-                },
+                "id":
+                    release.id,
+
+                "release_name":
+                    release.release_name,
+
+                "release_order":
+                    release.release_order,
+
+                "pods":
+                    pod_data,
+
+                "total":
+                    {
+                        "requirements_rtb":
+                            release_requirements,
+
+                        "test_cases":
+                            release_test_cases,
+
+                        "automatable":
+                            release_automatable,
+
+                        "automated":
+                            release_automated,
+
+                        "automation_percentage":
+                            release_percentage,
+                    },
+
+                "has_upload":
+                    latest_upload is not None,
             }
         )
 
-        total_requirements += release_requirements
-        total_test_cases += release_test_cases
-        total_automatable += release_automatable
-        total_automated += release_automated
+    # ========================================================
+    # Overall requirements
+    # ========================================================
+
+    total_requirements = (
+        len(uploaded_jira_ids)
+        + manual_requirements
+    )
+
+    # ========================================================
+    # Overall coverage
+    # ========================================================
 
     overall_percentage = (
         round(
@@ -355,22 +956,50 @@ def get_automation_summary(
         else None
     )
 
+    # ========================================================
+    # Response
+    # ========================================================
+
     return {
+
         "project": {
-            "id": project.id,
-            "name": project.name,
-            "project_key": project.project_key,
+
+            "id":
+                project.id,
+
+            "name":
+                project.name,
+
+            "project_key":
+                project.project_key,
         },
-        "releases": result,
+
+        "releases":
+            result,
+
         "totals": {
-            "requirements_rtb": total_requirements,
-            "test_cases": total_test_cases,
-            "automatable": total_automatable,
-            "automated": total_automated,
+
+            "requirements_rtb":
+                total_requirements,
+
+            "test_cases":
+                total_test_cases,
+
+            "automatable":
+                total_automatable,
+
+            "automated":
+                total_automated,
+
             "automation_percentage":
                 overall_percentage,
         },
     }
+
+
+# ============================================================
+# CREATE RELEASE
+# ============================================================
 
 @router.post(
     "/{project_id}/automation/releases",
@@ -397,7 +1026,6 @@ def create_automation_release(
             detail="Project not found",
         )
 
-
     existing = (
         db.query(AutomationRelease)
         .filter(
@@ -416,7 +1044,6 @@ def create_automation_release(
             detail="Release already exists",
         )
 
-
     last_release = (
         db.query(AutomationRelease)
         .filter(
@@ -429,26 +1056,19 @@ def create_automation_release(
         .first()
     )
 
-
     release_order = (
         last_release.release_order + 1
         if last_release
         else 1
     )
 
-
     release = AutomationRelease(
-
         project_id=project_id,
-
         release_name=
             release_data.release_name,
-
         release_order=
             release_order,
-
     )
-
 
     db.add(release)
 
@@ -457,6 +1077,11 @@ def create_automation_release(
     db.refresh(release)
 
     return release
+
+
+# ============================================================
+# CREATE POD DETAIL
+# ============================================================
 
 @router.post(
     "/automation/releases/{release_id}/details",
@@ -484,12 +1109,13 @@ def create_automation_detail(
             detail="Release not found",
         )
 
-
     detail = AutomationDetail(
 
-        release_id=release_id,
+        release_id=
+            release_id,
 
-        pod=detail_data.pod,
+        pod=
+            detail_data.pod,
 
         requirements_rtb=
             detail_data.requirements_rtb,
@@ -502,9 +1128,7 @@ def create_automation_detail(
 
         automated=
             detail_data.automated,
-
     )
-
 
     db.add(detail)
 
@@ -513,6 +1137,11 @@ def create_automation_detail(
     db.refresh(detail)
 
     return detail
+
+
+# ============================================================
+# UPDATE POD DETAIL
+# ============================================================
 
 @router.put(
     "/automation/details/{detail_id}",
@@ -540,13 +1169,11 @@ def update_automation_detail(
             detail="Automation detail not found",
         )
 
-
     updates = (
         detail_data.model_dump(
             exclude_unset=True
         )
     )
-
 
     for field, value in updates.items():
 
@@ -556,12 +1183,16 @@ def update_automation_detail(
             value,
         )
 
-
     db.commit()
 
     db.refresh(detail)
 
     return detail
+
+
+# ============================================================
+# DELETE POD DETAIL
+# ============================================================
 
 @router.delete(
     "/automation/details/{detail_id}"
@@ -587,11 +1218,9 @@ def delete_automation_detail(
             detail="Automation detail not found",
         )
 
-
     db.delete(detail)
 
     db.commit()
-
 
     return {
         "message":
