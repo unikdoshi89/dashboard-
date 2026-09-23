@@ -297,6 +297,10 @@ function AutomationDetails() {
       setUploadMessageType("success");
       setSelectedFile(null);
 
+      // Refresh the main automation response so the release totals
+      // and top summary cards immediately reflect the uploaded Excel.
+      await loadAutomation();
+
       await loadLatestAutomationUploadForRelease(releaseId);
     } catch (err) {
       console.error("Automation Excel upload failed:", err);
@@ -663,7 +667,7 @@ function AutomationDetails() {
                 grid
                 grid-cols-1
                 sm:grid-cols-2
-                lg:grid-cols-5
+                lg:grid-cols-6
                 gap-4
                 mb-8
               "
@@ -700,6 +704,15 @@ function AutomationDetails() {
                 value={
                   automation.totals
                     ?.automatable ?? 0
+                }
+              />
+
+
+              <SummaryCard
+                title="Automated"
+                value={
+                  automation.totals
+                    ?.automated ?? 0
                 }
               />
 
@@ -1216,9 +1229,94 @@ function AutomationDetails() {
                                             <td className="px-3 py-2 text-center">{row.automated || "-"}</td>
                                           </tr>
                                         ))}
+
+                                        {/* Uploaded Test Cases Total */}
+                                        <tr className="bg-gray-100 border-t-2 border-gray-300 font-bold">
+                                          <td colSpan="2" className="px-3 py-3 text-gray-900">
+                                            TOTAL
+                                          </td>
+                                          <td className="px-3 py-3 text-gray-900">
+                                            {release.total?.test_cases ?? (releaseUploads[release.id].rows || []).length}
+                                          </td>
+                                          <td colSpan="2" className="px-3 py-3 text-gray-900">
+                                            {release.total?.requirements_rtb ?? 0} unique Jira IDs
+                                          </td>
+                                          <td className="px-3 py-3 text-gray-900">
+                                            —
+                                          </td>
+                                          <td className="px-3 py-3 text-center text-gray-900">
+                                            {release.total?.automatable ?? 0}
+                                          </td>
+                                          <td className="px-3 py-3 text-center text-gray-900">
+                                            {release.total?.automated ?? 0}
+                                          </td>
+                                        </tr>
                                       </tbody>
                                     </table>
                                   </div>
+                                </td>
+                              </tr>
+                            )}
+
+
+                            {/* Release Total Row */}
+
+                            {expanded && (
+                              <tr
+                                className="
+                                  bg-blue-50/40
+                                  border-b
+                                  border-blue-100
+                                  font-semibold
+                                "
+                              >
+                                <td
+                                  className="px-5 py-3 text-gray-500"
+                                >
+                                  ↳
+                                </td>
+
+                                <td
+                                  className="px-5 py-3 text-gray-900"
+                                >
+                                  Release Total
+                                </td>
+
+                                <td
+                                  className="px-5 py-3 text-right text-gray-900"
+                                >
+                                  {release.total?.requirements_rtb ?? 0}
+                                </td>
+
+                                <td
+                                  className="px-5 py-3 text-right text-gray-900"
+                                >
+                                  {release.total?.test_cases ?? 0}
+                                </td>
+
+                                <td
+                                  className="px-5 py-3 text-right text-gray-900"
+                                >
+                                  {release.total?.automatable ?? 0}
+                                </td>
+
+                                <td
+                                  className="px-5 py-3 text-right text-gray-900"
+                                >
+                                  {release.total?.automated ?? 0}
+                                </td>
+
+                                <td
+                                  className="px-5 py-3 text-right text-gray-900"
+                                >
+                                  {release.total?.automation_percentage !== null &&
+                                  release.total?.automation_percentage !== undefined
+                                    ? `${release.total.automation_percentage}%`
+                                    : "—"}
+                                </td>
+
+                                <td className="px-5 py-3 text-center text-xs text-gray-500">
+                                  {release.has_upload ? "Excel" : "POD"}
                                 </td>
                               </tr>
                             )}
