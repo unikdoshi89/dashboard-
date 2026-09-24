@@ -681,11 +681,14 @@ async def get_jira_bugs(
         environment = get_issue_environment(
             fields=fields,
             environment_field=(
-                environment_field
-                or None
-            ),
-            uat_label=uat_label,
-            prod_label=prod_label,
+              jira_config.environment_field
+              if jira_config.environment_field
+              else None
+             ),
+            uat_label=jira_config.uat_label,
+            prod_label=jira_config.prod_label,
+            uat_environment=jira_config.uat_environment,
+            prod_environment=jira_config.prod_environment,
         )
 
         # ----------------------------------------------------
