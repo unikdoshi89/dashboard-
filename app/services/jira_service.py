@@ -47,6 +47,124 @@ async def test_jira_connection(
     }
 
 
+# ============================================================
+# Jira Field Resolution
+# ============================================================
+
+async def resolve_jira_field_id(
+    jira_url: str,
+    jira_email: str,
+    jira_api_token: str,
+    field_name_or_id: str,
+):
+    """
+    Resolve a Jira field name to its actual Jira field ID.
+
+    Example:
+
+        Env_IOP
+            ->
+        customfield_12345
+
+    If the supplied value is already a Jira field ID,
+    it is returned unchanged.
+
+    This allows the Jira configuration UI to store either:
+
+        Env_IOP
+
+    or:
+
+        customfield_12345
+    """
+
+    if not field_name_or_id:
+        return None
+
+    field_name_or_id = str(
+        field_name_or_id
+    ).strip()
+
+    if not field_name_or_id:
+        return None
+
+    # --------------------------------------------------------
+    # Already a Jira custom field ID
+    # --------------------------------------------------------
+
+    if field_name_or_id.startswith(
+        "customfield_"
+    ):
+        return field_name_or_id
+
+    url = (
+        f"{jira_url.rstrip('/')}"
+        "/rest/api/3/field"
+    )
+
+    headers = {
+        "Accept": "application/json",
+    }
+
+    async with httpx.AsyncClient(
+        timeout=30,
+        verify=False,
+    ) as client:
+
+        response = await client.get(
+            url,
+            auth=(
+                jira_email,
+                jira_api_token,
+            ),
+            headers=headers,
+        )
+
+    if response.status_code != 200:
+        raise RuntimeError(
+            "Unable to retrieve Jira fields: "
+            f"{response.status_code} - "
+            f"{response.text}"
+        )
+
+    jira_fields = response.json()
+
+    requested_name = (
+        field_name_or_id
+        .strip()
+        .lower()
+    )
+
+    # --------------------------------------------------------
+    # Exact field-name match
+    # --------------------------------------------------------
+
+    for field in jira_fields:
+
+        field_id = field.get("id")
+        field_name = field.get("name")
+
+        if not field_id or not field_name:
+            continue
+
+        if (
+            str(field_name)
+            .strip()
+            .lower()
+            == requested_name
+        ):
+            return field_id
+
+    raise RuntimeError(
+        f"Jira field '{field_name_or_id}' "
+        "was not found."
+    )
+
+
+# ============================================================
+# Jira Bugs
+# ============================================================
+
 async def search_jira_bugs(
     jira_url: str,
     jira_email: str,
@@ -68,6 +186,29 @@ async def search_jira_bugs(
     all_issues = []
     next_page_token = None
 
+    # --------------------------------------------------------
+    # Resolve configured environment field
+    #
+    # Example:
+    #
+    # Env_IOP
+    #     ->
+    # customfield_12345
+    # --------------------------------------------------------
+
+    resolved_environment_field = None
+
+    if environment_field:
+
+        resolved_environment_field = (
+            await resolve_jira_field_id(
+                jira_url=jira_url,
+                jira_email=jira_email,
+                jira_api_token=jira_api_token,
+                field_name_or_id=environment_field,
+            )
+        )
+
     async with httpx.AsyncClient(
         timeout=60,
         verify=False,
@@ -86,9 +227,19 @@ async def search_jira_bugs(
                 "labels",
             ]
 
-            if environment_field:
-                if environment_field not in fields:
-                    fields.append(environment_field)
+            # ------------------------------------------------
+            # Add resolved Jira environment field
+            # ------------------------------------------------
+
+            if resolved_environment_field:
+
+                if (
+                    resolved_environment_field
+                    not in fields
+                ):
+                    fields.append(
+                        resolved_environment_field
+                    )
 
             payload = {
                 "jql": jql,
@@ -96,8 +247,15 @@ async def search_jira_bugs(
                 "fields": fields,
             }
 
+            # ------------------------------------------------
+            # Pagination
+            # ------------------------------------------------
+
             if next_page_token:
-                payload["nextPageToken"] = next_page_token
+
+                payload[
+                    "nextPageToken"
+                ] = next_page_token
 
             response = await client.post(
                 url,
@@ -110,8 +268,9 @@ async def search_jira_bugs(
             )
 
             if response.status_code != 200:
+
                 raise RuntimeError(
-                    f"Jira API failed: "
+                    "Jira API failed: "
                     f"{response.status_code} - "
                     f"{response.text}"
                 )
@@ -123,10 +282,14 @@ async def search_jira_bugs(
                 [],
             )
 
-            all_issues.extend(issues)
+            all_issues.extend(
+                issues
+            )
 
-            next_page_token = data.get(
-                "nextPageToken"
+            next_page_token = (
+                data.get(
+                    "nextPageToken"
+                )
             )
 
             if not next_page_token:
@@ -135,8 +298,15 @@ async def search_jira_bugs(
     return {
         "issues": all_issues,
         "total": len(all_issues),
+        "environment_field": (
+            resolved_environment_field
+        ),
     }
 
+
+# ============================================================
+# Jira Features
+# ============================================================
 
 async def search_jira_features(
     jira_url: str,
@@ -159,6 +329,23 @@ async def search_jira_features(
     all_features = []
     next_page_token = None
 
+    # --------------------------------------------------------
+    # Resolve configured environment field
+    # --------------------------------------------------------
+
+    resolved_environment_field = None
+
+    if environment_field:
+
+        resolved_environment_field = (
+            await resolve_jira_field_id(
+                jira_url=jira_url,
+                jira_email=jira_email,
+                jira_api_token=jira_api_token,
+                field_name_or_id=environment_field,
+            )
+        )
+
     async with httpx.AsyncClient(
         timeout=60,
         verify=False,
@@ -179,9 +366,19 @@ async def search_jira_features(
                 "issuetype",
             ]
 
-            if environment_field:
-                if environment_field not in fields:
-                    fields.append(environment_field)
+            # ------------------------------------------------
+            # Add resolved environment field
+            # ------------------------------------------------
+
+            if resolved_environment_field:
+
+                if (
+                    resolved_environment_field
+                    not in fields
+                ):
+                    fields.append(
+                        resolved_environment_field
+                    )
 
             payload = {
                 "jql": jql,
@@ -189,8 +386,15 @@ async def search_jira_features(
                 "fields": fields,
             }
 
+            # ------------------------------------------------
+            # Pagination
+            # ------------------------------------------------
+
             if next_page_token:
-                payload["nextPageToken"] = next_page_token
+
+                payload[
+                    "nextPageToken"
+                ] = next_page_token
 
             response = await client.post(
                 url,
@@ -203,8 +407,9 @@ async def search_jira_features(
             )
 
             if response.status_code != 200:
+
                 raise RuntimeError(
-                    f"Jira API failed: "
+                    "Jira API failed: "
                     f"{response.status_code} - "
                     f"{response.text}"
                 )
@@ -216,10 +421,14 @@ async def search_jira_features(
                 [],
             )
 
-            all_features.extend(features)
+            all_features.extend(
+                features
+            )
 
-            next_page_token = data.get(
-                "nextPageToken"
+            next_page_token = (
+                data.get(
+                    "nextPageToken"
+                )
             )
 
             if not next_page_token:
@@ -228,126 +437,315 @@ async def search_jira_features(
     return {
         "issues": all_features,
         "total": len(all_features),
+        "environment_field": (
+            resolved_environment_field
+        ),
     }
 
 
-def _extract_environment_value(value):
-    """Normalize common Jira environment-field response formats."""
+# ============================================================
+# Environment Value Extraction
+# ============================================================
 
-    if isinstance(value, dict):
+def _extract_environment_value(
+    value,
+):
+    """
+    Normalize common Jira custom-field response formats.
+
+    Supported formats:
+
+        "UAT"
+
+        {
+            "value": "UAT"
+        }
+
+        {
+            "name": "UAT"
+        }
+
+        {
+            "displayName": "UAT"
+        }
+
+        [
+            {
+                "value": "UAT"
+            }
+        ]
+
+        [
+            "UAT"
+        ]
+    """
+
+    # --------------------------------------------------------
+    # Dictionary
+    # --------------------------------------------------------
+
+    if isinstance(
+        value,
+        dict,
+    ):
+
         return (
             value.get("value")
             or value.get("name")
             or value.get("displayName")
         )
 
-    if isinstance(value, list):
+    # --------------------------------------------------------
+    # List
+    # --------------------------------------------------------
+
+    if isinstance(
+        value,
+        list,
+    ):
+
         values = []
 
         for item in value:
-            extracted = _extract_environment_value(item)
+
+            extracted = (
+                _extract_environment_value(
+                    item
+                )
+            )
 
             if extracted:
+
                 values.append(
-                    str(extracted).strip()
+                    str(
+                        extracted
+                    ).strip()
                 )
 
-        return ", ".join(values)
+        if values:
+
+            return ", ".join(
+                values
+            )
+
+        return None
+
+    # --------------------------------------------------------
+    # Empty
+    # --------------------------------------------------------
 
     if value is None:
         return None
 
-    return str(value).strip()
+    # --------------------------------------------------------
+    # Plain string / number
+    # --------------------------------------------------------
+
+    return str(
+        value
+    ).strip()
 
 
-def _configured_labels(value):
-    """Convert one or more comma-separated configured labels to a set."""
+# ============================================================
+# Configured Labels
+# ============================================================
+
+def _configured_labels(
+    value,
+):
+    """
+    Convert one or more comma-separated
+    configured labels into a lowercase set.
+
+    Example:
+
+        "prod, production, PROD"
+
+    becomes:
+
+        {
+            "prod",
+            "production"
+        }
+    """
 
     if not value:
         return set()
 
     return {
         label.strip().lower()
-        for label in str(value).split(",")
+        for label in str(
+            value
+        ).split(",")
         if label.strip()
     }
 
+
+# ============================================================
+# Environment Classification
+# ============================================================
 
 def get_issue_environment(
     fields=None,
     environment_field=None,
     uat_label=None,
     prod_label=None,
+    uat_environment=None,
+    prod_environment=None,
 ):
     """
     Determine Jira issue environment.
 
-    Production and UAT are determined independently using OR logic:
+    Classification rules:
 
-        PROD = configured PROD environment value OR PROD label
-        UAT  = configured UAT environment value OR UAT label
+        PROD =
+            configured PROD environment value
+            OR
+            configured PROD label
 
-    SIT does not have its own tag/value. Anything that is neither
-    UAT nor PROD is treated as SIT by the caller/report.
+        UAT =
+            configured UAT environment value
+            OR
+            configured UAT label
 
-    The environment field is optional. When it is not configured,
-    classification falls back to labels.
+        SIT =
+            anything that is neither UAT nor PROD
+
+    SIT does not require a Jira field or label.
+
+    The environment field is optional.
+
+    The configured environment values are also optional.
+
+    Defaults:
+
+        UAT environment -> UAT
+        PROD environment -> PROD
+
+    This keeps compatibility with existing projects.
     """
 
     fields = fields or {}
 
-    # ------------------------------------------------------------
-    # Read configured Jira environment field
-    # ------------------------------------------------------------
+    # ========================================================
+    # 1. ENVIRONMENT FIELD
+    # ========================================================
 
     environment_value = None
 
     if environment_field:
-        environment_value = _extract_environment_value(
-            fields.get(environment_field)
+
+        environment_value = (
+            fields.get(
+                environment_field
+            )
+        )
+
+        environment_value = (
+            _extract_environment_value(
+                environment_value
+            )
         )
 
     normalized_environment = (
-        str(environment_value).strip().upper()
+        str(
+            environment_value
+        )
+        .strip()
+        .upper()
         if environment_value
         else None
     )
 
-    # ------------------------------------------------------------
-    # Read Jira labels
-    # ------------------------------------------------------------
+    # ========================================================
+    # 2. CONFIGURED ENVIRONMENT VALUES
+    # ========================================================
 
-    labels = fields.get("labels") or []
+    configured_uat_environment = (
+        str(
+            uat_environment
+        )
+        .strip()
+        .upper()
+        if uat_environment
+        else "UAT"
+    )
+
+    configured_prod_environment = (
+        str(
+            prod_environment
+        )
+        .strip()
+        .upper()
+        if prod_environment
+        else "PROD"
+    )
+
+    # ========================================================
+    # 3. LABELS
+    # ========================================================
+
+    labels = (
+        fields.get(
+            "labels"
+        )
+        or []
+    )
 
     normalized_labels = {
-        str(label).strip().lower()
+        str(label)
+        .strip()
+        .lower()
         for label in labels
         if str(label).strip()
     }
 
-    uat_labels = _configured_labels(uat_label)
-    prod_labels = _configured_labels(prod_label)
+    uat_labels = _configured_labels(
+        uat_label
+    )
 
-    # ------------------------------------------------------------
-    # PROD must win when either PROD source matches.
-    # This also handles an issue that has both UAT and PROD
-    # indicators: a production indicator is sufficient for PROD.
-    # ------------------------------------------------------------
+    prod_labels = _configured_labels(
+        prod_label
+    )
+
+    # ========================================================
+    # 4. PROD
+    #
+    # PROD wins if either the environment field OR
+    # a configured PROD label matches.
+    # ========================================================
 
     if (
-        normalized_environment == "PROD"
-        or bool(prod_labels & normalized_labels)
+        normalized_environment
+        == configured_prod_environment
+        or bool(
+            prod_labels
+            & normalized_labels
+        )
     ):
         return "PROD"
 
-    # ------------------------------------------------------------
-    # UAT when either UAT source matches.
-    # ------------------------------------------------------------
+    # ========================================================
+    # 5. UAT
+    #
+    # UAT is returned if either the environment field OR
+    # a configured UAT label matches.
+    # ========================================================
 
     if (
-        normalized_environment == "UAT"
-        or bool(uat_labels & normalized_labels)
+        normalized_environment
+        == configured_uat_environment
+        or bool(
+            uat_labels
+            & normalized_labels
+        )
     ):
         return "UAT"
+
+    # ========================================================
+    # 6. SIT / UNKNOWN
+    #
+    # Caller treats anything not UAT/PROD as SIT.
+    # ========================================================
 
     return None
