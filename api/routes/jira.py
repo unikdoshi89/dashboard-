@@ -140,8 +140,8 @@ def get_jira_config(
     config = (
         db.query(JiraConfiguration)
         .filter(
-            JiraConfiguration.project_id
-            == project_id
+            JiraConfiguration.project_id == project_id,
+            JiraConfiguration.active.is_(True),
         )
         .first()
     )
@@ -153,7 +153,12 @@ def get_jira_config(
             "jira_url": "",
             "jira_email": "",
             "jql": "",
+            "feature_jql": "",
+            "environment_field": "",
+            "uat_label": "",
+            "prod_label": "",
             "active": False,
+            "has_api_token": False,
         }
 
     return {
@@ -162,12 +167,12 @@ def get_jira_config(
         "jira_url": config.jira_url,
         "jira_email": config.jira_email,
         "jql": config.jql,
-        "active": config.active,
-
-        # Never return the real token
-        "has_api_token": bool(
-            config.jira_api_token
-        ),
+        "feature_jql": config.feature_jql or "",
+        "environment_field": getattr(config, "environment_field", None) or "",
+        "uat_label": config.uat_label or "",
+        "prod_label": config.prod_label or "",
+        "active": bool(config.active),
+        "has_api_token": bool(config.jira_api_token),
     }
 
 
@@ -279,6 +284,16 @@ def create_or_update_jira_config(
             config_data.jql.strip()
         )
 
+        config.feature_jql = (
+            config_data.feature_jql.strip()
+        )
+
+        config.environment_field = (
+            config_data.environment_field.strip()
+            if config_data.environment_field
+            else None
+        )
+
         # Project-specific UAT label
         config.uat_label = (
             config_data.uat_label.strip()
@@ -328,7 +343,11 @@ def create_or_update_jira_config(
                 config_data.feature_jql.strip()
             ),
 
-
+            environment_field=(
+                config_data.environment_field.strip()
+                if config_data.environment_field
+                else None
+            ),
 
             # Project-specific UAT label
             uat_label=(
@@ -368,6 +387,9 @@ def create_or_update_jira_config(
         "jira_email": config.jira_email,
         "jql": config.jql,
         "feature_jql": config.feature_jql,
+        "environment_field": (
+            getattr(config, "environment_field", None) or ""
+        ),
 
         # Return configured labels
         "uat_label": config.uat_label,
