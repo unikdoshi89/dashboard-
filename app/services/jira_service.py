@@ -52,6 +52,115 @@ async def test_jira_connection(
 
 
 # ============================================================
+# Resolve Jira Field Name -> Jira Field ID
+# ============================================================
+
+async def resolve_jira_field_id(
+    jira_url: str,
+    jira_email: str,
+    jira_api_token: str,
+    environment_field: str | None,
+):
+    """
+    Resolve a configured Jira field name to its actual Jira field ID.
+
+    Example:
+
+        Configured:
+            Env_IOP
+
+        Jira field API:
+            {
+                "id": "customfield_10136",
+                "name": "Env_IOP"
+            }
+
+        Returns:
+            customfield_10136
+
+    If the supplied value is already a Jira field ID, it is returned
+    directly.
+    """
+
+    if not environment_field:
+        return None
+
+    configured_field = str(
+        environment_field
+    ).strip()
+
+    if not configured_field:
+        return None
+
+    # ------------------------------------------------------------
+    # If already a Jira field ID, don't resolve again.
+    # ------------------------------------------------------------
+
+    if (
+        configured_field == "environment"
+        or configured_field.startswith("customfield_")
+    ):
+        return configured_field
+
+    url = (
+        f"{jira_url.rstrip('/')}"
+        "/rest/api/3/field"
+    )
+
+    headers = {
+        "Accept": "application/json",
+    }
+
+    async with httpx.AsyncClient(
+        timeout=30,
+        verify=False,
+    ) as client:
+
+        response = await client.get(
+            url,
+            auth=(
+                jira_email,
+                jira_api_token,
+            ),
+            headers=headers,
+        )
+
+    if response.status_code != 200:
+        raise RuntimeError(
+            "Unable to retrieve Jira fields: "
+            f"{response.status_code} - "
+            f"{response.text}"
+        )
+
+    fields = response.json()
+
+    # ------------------------------------------------------------
+    # Exact field-name match
+    # ------------------------------------------------------------
+
+    for field in fields:
+
+        field_name = str(
+            field.get("name", "")
+        ).strip()
+
+        if field_name.lower() == configured_field.lower():
+
+            field_id = field.get("id")
+
+            if field_id:
+                return field_id
+
+    # ------------------------------------------------------------
+    # No matching field found
+    # ------------------------------------------------------------
+
+    raise RuntimeError(
+        f"Jira field '{configured_field}' was not found."
+    )
+
+
+# ============================================================
 # Jira Bugs
 # ============================================================
 
@@ -72,6 +181,23 @@ async def search_jira_bugs(
         "Accept": "application/json",
         "Content-Type": "application/json",
     }
+
+    # ------------------------------------------------------------
+    # Resolve configured field name to actual Jira field ID
+    # ------------------------------------------------------------
+
+    resolved_environment_field = None
+
+    if environment_field:
+
+        resolved_environment_field = (
+            await resolve_jira_field_id(
+                jira_url=jira_url,
+                jira_email=jira_email,
+                jira_api_token=jira_api_token,
+                environment_field=environment_field,
+            )
+        )
 
     all_issues = []
     next_page_token = None
@@ -94,23 +220,19 @@ async def search_jira_bugs(
                 "labels",
             ]
 
-            # ------------------------------------------------
-            # Add configured environment field
-            # ------------------------------------------------
+            # ----------------------------------------------------
+            # Add actual Jira field ID
+            # ----------------------------------------------------
 
-            if environment_field:
-
-                environment_field = (
-                    str(environment_field)
-                    .strip()
-                )
+            if resolved_environment_field:
 
                 if (
-                    environment_field
-                    and environment_field not in fields
+                    resolved_environment_field
+                    not in fields
                 ):
+
                     fields.append(
-                        environment_field
+                        resolved_environment_field
                     )
 
             payload = {
@@ -119,9 +241,9 @@ async def search_jira_bugs(
                 "fields": fields,
             }
 
-            # ------------------------------------------------
+            # ----------------------------------------------------
             # Pagination
-            # ------------------------------------------------
+            # ----------------------------------------------------
 
             if next_page_token:
 
@@ -170,6 +292,11 @@ async def search_jira_bugs(
     return {
         "issues": all_issues,
         "total": len(all_issues),
+
+        # Helpful for the caller/debugging
+        "environment_field": (
+            resolved_environment_field
+        ),
     }
 
 
@@ -195,6 +322,23 @@ async def search_jira_features(
         "Content-Type": "application/json",
     }
 
+    # ------------------------------------------------------------
+    # Resolve configured field name to actual Jira field ID
+    # ------------------------------------------------------------
+
+    resolved_environment_field = None
+
+    if environment_field:
+
+        resolved_environment_field = (
+            await resolve_jira_field_id(
+                jira_url=jira_url,
+                jira_email=jira_email,
+                jira_api_token=jira_api_token,
+                environment_field=environment_field,
+            )
+        )
+
     all_features = []
     next_page_token = None
 
@@ -218,23 +362,19 @@ async def search_jira_features(
                 "issuetype",
             ]
 
-            # ------------------------------------------------
-            # Add configured environment field
-            # ------------------------------------------------
+            # ----------------------------------------------------
+            # Add actual Jira field ID
+            # ----------------------------------------------------
 
-            if environment_field:
-
-                environment_field = (
-                    str(environment_field)
-                    .strip()
-                )
+            if resolved_environment_field:
 
                 if (
-                    environment_field
-                    and environment_field not in fields
+                    resolved_environment_field
+                    not in fields
                 ):
+
                     fields.append(
-                        environment_field
+                        resolved_environment_field
                     )
 
             payload = {
@@ -243,9 +383,9 @@ async def search_jira_features(
                 "fields": fields,
             }
 
-            # ------------------------------------------------
+            # ----------------------------------------------------
             # Pagination
-            # ------------------------------------------------
+            # ----------------------------------------------------
 
             if next_page_token:
 
@@ -294,6 +434,11 @@ async def search_jira_features(
     return {
         "issues": all_features,
         "total": len(all_features),
+
+        # Helpful for the caller/debugging
+        "environment_field": (
+            resolved_environment_field
+        ),
     }
 
 
@@ -461,16 +606,21 @@ def get_issue_environment(
     if environment_field:
 
         environment_field = (
-            str(environment_field)
-            .strip()
+            str(
+                environment_field
+            ).strip()
         )
 
         # ----------------------------------------------------
-        # First try exactly what was configured.
+        # Direct lookup
         #
-        # Example:
+        # At this point environment_field should normally be:
         #
-        # environment_field = "Env_IOP"
+        # customfield_10136
+        #
+        # because search_jira_bugs/features resolve:
+        #
+        # Env_IOP -> customfield_10136
         # ----------------------------------------------------
 
         environment_raw = fields.get(
@@ -478,10 +628,7 @@ def get_issue_environment(
         )
 
         # ----------------------------------------------------
-        # If Jira returned the actual customfield ID instead,
-        # allow it to be supplied through a field mapping.
-        #
-        # This does NOT hard-code any Jira field.
+        # Case-insensitive fallback
         # ----------------------------------------------------
 
         if environment_raw is None:
@@ -489,7 +636,9 @@ def get_issue_environment(
             for key, value in fields.items():
 
                 if (
-                    str(key).strip().lower()
+                    str(key)
+                    .strip()
+                    .lower()
                     == environment_field.lower()
                 ):
 
