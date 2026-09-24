@@ -99,7 +99,20 @@ function JiraDetails() {
 
       const data = await getJiraConfig(projectId);
 
-      setConfigured(Boolean(data.configured));
+      const isConfigured =
+        Boolean(data?.configured) &&
+        Boolean(data?.active);
+
+      setConfigured(isConfigured);
+
+      if (!isConfigured) {
+        setBugs([]);
+        setUatBugs([]);
+        setProdBugs([]);
+        setFeatures([]);
+        setFeatureTotal(0);
+        setFeaturePages(0);
+      }
 
       setJiraUrl(data.jira_url || "");
       setJiraEmail(data.jira_email || "");
@@ -312,13 +325,6 @@ function JiraDetails() {
         return;
       }
 
-      if (!environmentField.trim()) {
-        setConfigError(
-          "Jira environment field is required."
-        );
-        return;
-      }
-
       if (uatLabels.length === 0) {
         setConfigError(
           "At least one UAT issue label is required."
@@ -360,26 +366,48 @@ function JiraDetails() {
         payload
       );
 
-      setConfigured(true);
+      // The save response is the canonical result of the operation.
+      // Do not rely on the previous React `configured` state here.
+      const savedConfigured =
+        Boolean(data?.success) &&
+        Boolean(data?.active);
+
+      setConfigured(savedConfigured);
 
       setHasApiToken(
-        Boolean(data.has_api_token)
+        Boolean(data?.has_api_token)
       );
 
-      // Never keep the actual token in UI
+      // Keep the UI in sync with the values actually persisted.
+      setEnvironmentField(
+        data?.environment_field || ""
+      );
+
+      // Never keep the actual token in UI.
       setJiraApiToken("");
 
       setConfigMessage(
         "Jira configuration saved successfully."
       );
 
-      // Load Jira issues after saving
-      await loadBugs("");
-
+      // Reset feature search/page before reloading.
       setFeatureSearch("");
       setFeaturePage(1);
 
-      await loadFeatures("", 1);
+      // Reload both sections only after the save has completed.
+      // This prevents the old `configured` state from causing the
+      // newly-created project's first load to be treated as unconfigured.
+      if (savedConfigured) {
+        await loadBugs("");
+        await loadFeatures("", 1);
+      } else {
+        setBugs([]);
+        setUatBugs([]);
+        setProdBugs([]);
+        setFeatures([]);
+        setFeatureTotal(0);
+        setFeaturePages(0);
+      }
     } catch (err) {
       console.error(
         "Unable to save Jira configuration:",
@@ -471,15 +499,39 @@ function JiraDetails() {
   // ============================================================
 
   async function handleRefresh() {
-    await loadConfig();
+    try {
+      const data = await getJiraConfig(projectId);
 
-    // Use the current configuration state for refresh.
-    // If the project is configured, reload both sections.
-    if (configured) {
-      await loadBugs(search);
-      await loadFeatures(
-        featureSearch,
-        featurePage
+      const isConfigured =
+        Boolean(data?.configured) &&
+        Boolean(data?.active);
+
+      setConfigured(isConfigured);
+      setHasApiToken(Boolean(data?.has_api_token));
+      setEnvironmentField(data?.environment_field || "");
+
+      if (isConfigured) {
+        await loadBugs(search);
+        await loadFeatures(
+          featureSearch,
+          featurePage
+        );
+      } else {
+        setBugs([]);
+        setUatBugs([]);
+        setProdBugs([]);
+        setFeatures([]);
+        setFeatureTotal(0);
+        setFeaturePages(0);
+      }
+    } catch (err) {
+      console.error(
+        "Unable to refresh Jira configuration:",
+        err
+      );
+      setConfigError(
+        err?.response?.data?.detail ||
+        "Unable to refresh Jira configuration."
       );
     }
   }
