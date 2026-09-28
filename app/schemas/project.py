@@ -63,17 +63,22 @@ class UploadedTestCaseResponse(BaseModel):
 # ============================================================
 
 class JiraConfigurationCreate(BaseModel):
+
     jira_url: str
     jira_email: str
-    jira_api_token: str
+    jira_api_token: str = ""
+
     jql: str
-    feature_jql: str
+    feature_jql: str = ""
+
+    sit_jql: str | None = None
+    uat_jql: str | None = None
+    prod_jql: str | None = None
+
+    environment_field: str | None = None
+
     uat_label: str
     prod_label: str
-
-    environment_field: Optional[str] = None
-    uat_environment: Optional[str] = None
-    prod_environment: Optional[str] = None
 
     active: bool = True
 
