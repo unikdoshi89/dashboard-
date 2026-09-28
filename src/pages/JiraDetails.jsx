@@ -33,6 +33,9 @@ function JiraDetails() {
   const [jiraEmail, setJiraEmail] = useState("");
   const [jiraApiToken, setJiraApiToken] = useState("");
   const [jql, setJql] = useState("");
+  const [sitJql, setSitJql] = useState("");
+  const [uatJql, setUatJql] = useState("");
+  const [prodJql, setProdJql] = useState("");
   const [featureJql, setFeatureJql] = useState("");
 
   const [uatLabels, setUatLabels] = useState([]);
