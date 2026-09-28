@@ -8,12 +8,14 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
 )
+
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
 
 
 class JiraConfiguration(Base):
+
     __tablename__ = "jira_configurations"
 
     id: Mapped[int] = mapped_column(
@@ -28,6 +30,10 @@ class JiraConfiguration(Base):
         unique=True,
         index=True,
     )
+
+    # ============================================================
+    # Jira Connection
+    # ============================================================
 
     jira_url: Mapped[str] = mapped_column(
         String(500),
@@ -44,6 +50,12 @@ class JiraConfiguration(Base):
         nullable=False,
     )
 
+    # ============================================================
+    # Existing JQL
+    #
+    # Kept for backward compatibility and feature JQL generation.
+    # ============================================================
+
     jql: Mapped[str] = mapped_column(
         Text,
         nullable=False,
@@ -54,6 +66,29 @@ class JiraConfiguration(Base):
         nullable=False,
     )
 
+    # ============================================================
+    # Environment-specific JQL
+    # ============================================================
+
+    sit_jql: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    uat_jql: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    prod_jql: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    # ============================================================
+    # Existing label configuration
+    # ============================================================
+
     uat_label: Mapped[str] = mapped_column(
         String(150),
         nullable=False,
@@ -63,6 +98,22 @@ class JiraConfiguration(Base):
         String(150),
         nullable=False,
     )
+
+    # ============================================================
+    # Optional Jira environment field
+    #
+    # This is retained for display/classification when Jira
+    # actually returns the field.
+    # ============================================================
+
+    environment_field: Mapped[str | None] = mapped_column(
+        String(150),
+        nullable=True,
+    )
+
+    # ============================================================
+    # Status / timestamps
+    # ============================================================
 
     active: Mapped[bool] = mapped_column(
         Boolean,
@@ -82,17 +133,3 @@ class JiraConfiguration(Base):
         onupdate=datetime.utcnow,
         nullable=False,
     )
-     environment_field: Mapped[str | None] = mapped_column(
-    String(150),
-    nullable=True,
-)
-
-uat_environment: Mapped[str | None] = mapped_column(
-    String(100),
-    nullable=True,
-)
-
-prod_environment: Mapped[str | None] = mapped_column(
-    String(100),
-    nullable=True,
-)
