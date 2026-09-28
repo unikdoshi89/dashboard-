@@ -120,6 +120,9 @@ function JiraDetails() {
       setJiraUrl(data.jira_url || "");
       setJiraEmail(data.jira_email || "");
       setJql(data.jql || "");
+      setSitJql(data.sit_jql || "");
+      setUatJql(data.uat_jql || "");
+      setProdJql(data.prod_jql || "");
       setFeatureJql(data.feature_jql || "");
       setEnvironmentField(data.environment_field || "");
 
@@ -353,16 +356,35 @@ function JiraDetails() {
       }
 
       const payload = {
-        jira_url: jiraUrl.trim(),
-        jira_email: jiraEmail.trim(),
-        jira_api_token: jiraApiToken.trim(),
-        jql: jql.trim(),
-        feature_jql: featureJql.trim(),
-        environment_field: environmentField.trim(),
-        uat_label: uatLabels.join(","),
-        prod_label: prodLabels.join(","),
-        active,
-      };
+  jira_url: jiraUrl.trim(),
+  jira_email: jiraEmail.trim(),
+
+  jira_api_token:
+    jiraApiToken.trim(),
+
+  jql:
+    jql.trim(),
+
+  feature_jql:
+    featureJql.trim(),
+
+  sit_jql:
+    sitJql.trim(),
+
+  uat_jql:
+    uatJql.trim(),
+
+  prod_jql:
+    prodJql.trim(),
+
+  uat_label:
+    uatLabels.join(","),
+
+  prod_label:
+    prodLabels.join(","),
+
+  active,
+};
 
       const data = await saveJiraConfig(
         projectId,
@@ -898,6 +920,90 @@ function JiraDetails() {
                 </p>
 
               </div>
+
+              <div className="grid grid-cols-1 gap-4">
+
+  <div>
+    <label className="block text-sm font-medium text-gray-700 mb-1">
+      SIT Bug JQL
+    </label>
+
+    <textarea
+      value={sitJql}
+      onChange={(e) =>
+        setSitJql(e.target.value)
+      }
+      rows={3}
+      placeholder='Example: project = "Insurance Orchestration Platform" AND issuetype = Bug AND "Env_IOP[Dropdown]" = SIT'
+      className="
+        w-full
+        rounded-lg
+        border
+        border-gray-300
+        px-3
+        py-2
+        text-sm
+        focus:border-blue-500
+        focus:ring-blue-500
+      "
+    />
+  </div>
+
+
+  <div>
+    <label className="block text-sm font-medium text-gray-700 mb-1">
+      UAT Bug JQL
+    </label>
+
+    <textarea
+      value={uatJql}
+      onChange={(e) =>
+        setUatJql(e.target.value)
+      }
+      rows={3}
+      placeholder='Example: project = "Insurance Orchestration Platform" AND issuetype = Bug AND "Env_IOP[Dropdown]" = UAT'
+      className="
+        w-full
+        rounded-lg
+        border
+        border-gray-300
+        px-3
+        py-2
+        text-sm
+        focus:border-blue-500
+        focus:ring-blue-500
+      "
+    />
+  </div>
+
+
+  <div>
+    <label className="block text-sm font-medium text-gray-700 mb-1">
+      Production Bug JQL
+    </label>
+
+    <textarea
+      value={prodJql}
+      onChange={(e) =>
+        setProdJql(e.target.value)
+      }
+      rows={3}
+      placeholder='Example: project = "Insurance Orchestration Platform" AND issuetype = Bug AND "Env_IOP[Dropdown]" = PROD'
+      className="
+        w-full
+        rounded-lg
+        border
+        border-gray-300
+        px-3
+        py-2
+        text-sm
+        focus:border-blue-500
+        focus:ring-blue-500
+      "
+    />
+  </div>
+
+</div>
 
 
               {/* Feature / Story JQL */}
