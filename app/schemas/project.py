@@ -89,6 +89,9 @@ class JiraConfigurationResponse(BaseModel):
     jira_url: str
     jira_email: str
     jql: str
+    sit_jql: str | None = None
+    uat_jql: str | None = None
+    prod_jql: str | None = None
     feature_jql: str
     uat_label: str
     prod_label: str
