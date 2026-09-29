@@ -1,0 +1,101 @@
+# ============================================================
+# Base image
+#
+# ARM64  -> node:20-alpine
+# AMD64  -> node:20-alpine-amd64
+#
+# Jenkins passes NODE_IMAGE as a build argument.
+# ============================================================
+
+ARG NODE_IMAGE=enterprisequay.hbctxdom.com/qualityengineering/node:20-alpine-amd64
+
+
+# ============================================================
+# Build Stage
+# ============================================================
+
+FROM ${NODE_IMAGE} AS builder
+
+ARG ARTIFACTORY_USERNAME
+ARG ARTIFACTORY_PASSWORD
+ARG VITE_API_BASE_URL
+ARG VITE_BASE_PATH=/nirikshan/
+
+WORKDIR /app
+
+
+# ------------------------------------------------------------
+# Configure Artifactory
+# ------------------------------------------------------------
+
+RUN npm config set registry "https://artifactory.hdfcbank.com/artifactory/api/npm/QualityEngineering_npm_virtual/" \
+    && npm config set "//artifactory.hdfcbank.com/artifactory/api/npm/QualityEngineering_npm_virtual/:username" "${ARTIFACTORY_USERNAME}" \
+    && npm config set "//artifactory.hdfcbank.com/artifactory/api/npm/QualityEngineering_npm_virtual/:_password" "$(printf '%s' "${ARTIFACTORY_PASSWORD}" | base64 | tr -d '\n')"
+
+
+# ------------------------------------------------------------
+# Install dependencies
+# ------------------------------------------------------------
+
+COPY package*.json ./
+
+RUN npm install
+
+
+# ------------------------------------------------------------
+# Copy source
+# ------------------------------------------------------------
+
+COPY . .
+
+
+# ------------------------------------------------------------
+# Vite configuration
+# ------------------------------------------------------------
+
+ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
+ENV VITE_BASE_PATH=${VITE_BASE_PATH}
+
+
+# ------------------------------------------------------------
+# Build application
+# ------------------------------------------------------------
+
+RUN npm run build
+
+
+# ============================================================
+# Runtime Stage
+# ============================================================
+
+FROM ${NODE_IMAGE}
+
+WORKDIR /app
+
+
+# ------------------------------------------------------------
+# Install static file server
+# ------------------------------------------------------------
+
+RUN npm install -g serve
+
+
+# ------------------------------------------------------------
+# Copy frontend build
+# ------------------------------------------------------------
+
+COPY --from=builder /app/dist ./dist
+
+
+# ------------------------------------------------------------
+# Application port
+# ------------------------------------------------------------
+
+EXPOSE 8080
+
+
+# ------------------------------------------------------------
+# Start application
+# ------------------------------------------------------------
+
+CMD ["serve", "-s", "dist", "-l", "8080"]
