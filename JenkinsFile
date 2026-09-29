@@ -1,0 +1,256 @@
+pipeline {
+
+    agent {
+        node {
+            label 'Wealthagent-uat'
+        }
+    }
+
+    parameters {
+
+        string(
+            name: 'BRANCH',
+            defaultValue: 'Development-build',
+            description: 'Git Branch'
+        )
+
+        string(
+            name: 'TAG',
+            defaultValue: 'latest',
+            description: 'Docker Tag'
+        )
+
+        string(
+            name: 'VITE_API_BASE_URL',
+            defaultValue: 'http://uat.inspire.hdfcbankuat.com',
+            description: 'Backend URL'
+        )
+
+        choice(
+            name: 'TARGET_ARCH',
+            choices: [
+                'amd64',
+                'arm64'
+            ],
+            description: 'Target CPU architecture'
+        )
+    }
+
+
+    stages {
+
+
+        // ====================================================
+        // Checkout
+        // ====================================================
+
+        stage('Checkout') {
+
+            steps {
+
+                checkout([
+                    $class: 'GitSCM',
+
+                    branches: [[
+                        name: "*/${params.BRANCH}"
+                    ]],
+
+                    userRemoteConfigs: [[
+
+                        url: 'https://github.hdfcbank.com/HDFCBANK/nirikshan-frontend.git',
+
+                        credentialsId: 'GitHub-Jenkins-Generic'
+                    ]]
+                ])
+            }
+        }
+
+
+        // ====================================================
+        // Prepare Build Configuration
+        // ====================================================
+
+        stage('Prepare Build') {
+
+            steps {
+
+                script {
+
+                    if (params.TARGET_ARCH == 'amd64') {
+
+                        env.NODE_IMAGE =
+                            'enterprisequay.hbctxdom.com/qualityengineering/node:20-alpine-amd64'
+
+                    } else if (params.TARGET_ARCH == 'arm64') {
+
+                        env.NODE_IMAGE =
+                            'enterprisequay.hbctxdom.com/qualityengineering/node:20-alpine'
+
+                    } else {
+
+                        error("Unsupported architecture: ${params.TARGET_ARCH}")
+                    }
+
+
+                    echo "=========================================="
+                    echo "Build Configuration"
+                    echo "=========================================="
+                    echo "Branch       : ${params.BRANCH}"
+                    echo "Tag          : ${params.TAG}"
+                    echo "Architecture : ${params.TARGET_ARCH}"
+                    echo "Node Image   : ${env.NODE_IMAGE}"
+                    echo "API URL      : ${params.VITE_API_BASE_URL}"
+                    echo "=========================================="
+                }
+            }
+        }
+
+
+        // ====================================================
+        // Docker Build
+        // ====================================================
+
+        stage('Docker Build') {
+
+            steps {
+
+                withCredentials([
+
+                    usernamePassword(
+                        credentialsId: 'quay_id',
+                        usernameVariable: 'QUAY_USER',
+                        passwordVariable: 'QUAY_PASSWORD'
+                    ),
+
+                    usernamePassword(
+                        credentialsId: 'artifactory_id',
+                        usernameVariable: 'ARTIFACTORY_USERNAME',
+                        passwordVariable: 'ARTIFACTORY_PASSWORD'
+                    )
+
+                ]) {
+
+                    // ----------------------------------------
+                    // Login to Quay
+                    // ----------------------------------------
+
+                    sh '''
+                        echo "$QUAY_PASSWORD" | docker login enterprisequay.hbctxdom.com \
+                            -u "$QUAY_USER" \
+                            --password-stdin
+                    '''
+
+
+                    // ----------------------------------------
+                    // Build Docker image
+                    // ----------------------------------------
+
+                    sh '''
+                        docker build \
+                            -f docker-images/nirikshan-frontend/Dockerfile \
+                            -t nirikshan-frontend-build:${TAG} \
+                            --build-arg NODE_IMAGE="$NODE_IMAGE" \
+                            --build-arg ARTIFACTORY_USERNAME="$ARTIFACTORY_USERNAME" \
+                            --build-arg ARTIFACTORY_PASSWORD="$ARTIFACTORY_PASSWORD" \
+                            --build-arg VITE_API_BASE_URL="$VITE_API_BASE_URL" \
+                            .
+                    '''
+                }
+            }
+        }
+
+
+        // ====================================================
+        // Docker Push
+        // ====================================================
+
+        stage('Docker Push') {
+
+            steps {
+
+                withCredentials([
+
+                    usernamePassword(
+                        credentialsId: 'quay_id',
+                        usernameVariable: 'QUAY_USER',
+                        passwordVariable: 'QUAY_PASSWORD'
+                    )
+
+                ]) {
+
+                    // ----------------------------------------
+                    // Login to Quay
+                    // ----------------------------------------
+
+                    sh '''
+                        echo "$QUAY_PASSWORD" | docker login enterprisequay.hbctxdom.com \
+                            -u "$QUAY_USER" \
+                            --password-stdin
+                    '''
+
+
+                    // ----------------------------------------
+                    // Tag image
+                    // ----------------------------------------
+
+                    sh '''
+                        docker tag \
+                            nirikshan-frontend-build:${TAG} \
+                            enterprisequay.hbctxdom.com/qualityengineering/nirikshan-frontend:${TAG}
+                    '''
+
+
+                    // ----------------------------------------
+                    // Push image
+                    // ----------------------------------------
+
+                    sh '''
+                        docker push \
+                            enterprisequay.hbctxdom.com/qualityengineering/nirikshan-frontend:${TAG}
+                    '''
+                }
+            }
+        }
+    }
+
+
+    // ========================================================
+    // Post Actions
+    // ========================================================
+
+    post {
+
+        success {
+
+            echo """
+            ==========================================
+            Build Successful
+            ==========================================
+            Image:
+            enterprisequay.hbctxdom.com/qualityengineering/nirikshan-frontend:${params.TAG}
+
+            Architecture:
+            ${params.TARGET_ARCH}
+
+            Node Image:
+            ${env.NODE_IMAGE}
+            ==========================================
+            """
+        }
+
+        failure {
+
+            echo """
+            ==========================================
+            Build Failed
+            ==========================================
+            Architecture:
+            ${params.TARGET_ARCH}
+
+            Node Image:
+            ${env.NODE_IMAGE}
+            ==========================================
+            """
+        }
+    }
+}
