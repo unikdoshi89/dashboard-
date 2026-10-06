@@ -9,7 +9,9 @@ from app.models.project_qe_monthly_snapshot import (
 )
 from app.models.uploaded_test_case import UploadedTestCase
 
-from app.services.jira_service import search_jira_bugs
+from app.api.routes.jira import (
+    collect_jira_bug_metrics,
+)
 
 
 def _get_snapshot_month():
