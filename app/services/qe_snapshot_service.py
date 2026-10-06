@@ -11,6 +11,7 @@ from app.models.uploaded_test_case import UploadedTestCase
 
 from app.api.routes.jira import (
     collect_jira_bug_metrics,
+    collect_jira_feature_metrics,
 )
 
 
