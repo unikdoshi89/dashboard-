@@ -190,6 +190,352 @@ def normalize_jira_issue(
 
 
 # ============================================================
+# Reusable Jira Bug Metrics
+# ============================================================
+
+async def collect_jira_bug_metrics(
+    config: JiraConfiguration,
+):
+    """
+    Fetch ALL Jira bugs using the configured
+    SIT / UAT / PROD JQLs.
+
+    This is intentionally shared by:
+        1. Jira Bugs API
+        2. QE Monthly Snapshot
+
+    It uses search_jira_bugs(), which handles Jira pagination.
+    """
+
+    environment_field = (
+        getattr(
+            config,
+            "environment_field",
+            None,
+        )
+        or ""
+    ).strip()
+
+    uat_label = (
+        config.uat_label.strip()
+        if config.uat_label
+        else None
+    )
+
+    prod_label = (
+        config.prod_label.strip()
+        if config.prod_label
+        else None
+    )
+
+    sit_jql = (
+        config.sit_jql or ""
+    ).strip()
+
+    uat_jql = (
+        config.uat_jql or ""
+    ).strip()
+
+    prod_jql = (
+        config.prod_jql or ""
+    ).strip()
+
+    # --------------------------------------------------------
+    # Environment-specific JQL mode
+    # --------------------------------------------------------
+
+    use_environment_jql = bool(
+        sit_jql
+        or uat_jql
+        or prod_jql
+    )
+
+    # ========================================================
+    # Environment JQL mode
+    # ========================================================
+
+    if use_environment_jql:
+
+        environment_queries = []
+
+        if sit_jql:
+            environment_queries.append(
+                (
+                    "SIT",
+                    sit_jql,
+                )
+            )
+
+        if uat_jql:
+            environment_queries.append(
+                (
+                    "UAT",
+                    uat_jql,
+                )
+            )
+
+        if prod_jql:
+            environment_queries.append(
+                (
+                    "PROD",
+                    prod_jql,
+                )
+            )
+
+        all_bugs_by_key = {}
+
+        sit_bugs = []
+        uat_bugs = []
+        prod_bugs = []
+
+        # ----------------------------------------------------
+        # IMPORTANT:
+        #
+        # search_jira_bugs() fetches ALL Jira pages.
+        #
+        # Do NOT add max_results=200 here expecting only
+        # 200 total records.
+        # ----------------------------------------------------
+
+        for (
+            forced_environment,
+            environment_jql,
+        ) in environment_queries:
+
+            jira_data = await search_jira_bugs(
+                jira_url=config.jira_url,
+                jira_email=config.jira_email,
+                jira_api_token=config.jira_api_token,
+                jql=environment_jql,
+                environment_field=(
+                    environment_field or None
+                ),
+                max_results=100,
+            )
+
+            issues = jira_data.get(
+                "issues",
+                [],
+            )
+
+            for issue in issues:
+
+                bug = normalize_jira_issue(
+                    issue=issue,
+                    environment_field=(
+                        environment_field
+                    ),
+                    uat_label=uat_label,
+                    prod_label=prod_label,
+                    forced_environment=(
+                        forced_environment
+                    ),
+                )
+
+                jira_key = bug.get(
+                    "jira_id"
+                )
+
+                if not jira_key:
+                    continue
+
+                # ------------------------------------------------
+                # Deduplicate by Jira key.
+                # ------------------------------------------------
+
+                all_bugs_by_key[
+                    jira_key
+                ] = bug
+
+                if forced_environment == "SIT":
+
+                    sit_bugs.append(
+                        bug
+                    )
+
+                elif forced_environment == "UAT":
+
+                    uat_bugs.append(
+                        bug
+                    )
+
+                elif forced_environment == "PROD":
+
+                    prod_bugs.append(
+                        bug
+                    )
+
+        # ----------------------------------------------------
+        # Remove duplicates inside individual environment
+        # lists as well.
+        # ----------------------------------------------------
+
+        def unique_by_jira_key(
+            bugs,
+        ):
+
+            result = []
+            seen = set()
+
+            for bug in bugs:
+
+                jira_key = bug.get(
+                    "jira_id"
+                )
+
+                if not jira_key:
+                    continue
+
+                if jira_key in seen:
+                    continue
+
+                seen.add(jira_key)
+                result.append(bug)
+
+            return result
+
+        sit_bugs = unique_by_jira_key(
+            sit_bugs
+        )
+
+        uat_bugs = unique_by_jira_key(
+            uat_bugs
+        )
+
+        prod_bugs = unique_by_jira_key(
+            prod_bugs
+        )
+
+        all_bugs = list(
+            all_bugs_by_key.values()
+        )
+
+        return {
+            "bugs": all_bugs,
+
+            "total": len(
+                all_bugs
+            ),
+
+            "sit_bugs": sit_bugs,
+
+            "sit_total": len(
+                sit_bugs
+            ),
+
+            "uat_bugs": uat_bugs,
+
+            "uat_total": len(
+                uat_bugs
+            ),
+
+            "prod_bugs": prod_bugs,
+
+            "prod_total": len(
+                prod_bugs
+            ),
+        }
+
+    # ========================================================
+    # Backward-compatible single JQL mode
+    # ========================================================
+
+    if not config.jql:
+        raise RuntimeError(
+            "Jira JQL is not configured."
+        )
+
+    jira_data = await search_jira_bugs(
+        jira_url=config.jira_url,
+        jira_email=config.jira_email,
+        jira_api_token=config.jira_api_token,
+        jql=config.jql,
+        environment_field=(
+            environment_field or None
+        ),
+        max_results=100,
+    )
+
+    bugs = []
+    sit_bugs = []
+    uat_bugs = []
+    prod_bugs = []
+
+    for issue in jira_data.get(
+        "issues",
+        [],
+    ):
+
+        bug = normalize_jira_issue(
+            issue=issue,
+            environment_field=(
+                environment_field
+            ),
+            uat_label=uat_label,
+            prod_label=prod_label,
+        )
+
+        environment = (
+            bug.get("environment")
+        )
+
+        if not environment:
+
+            environment = "SIT"
+
+            bug["environment"] = (
+                "SIT"
+            )
+
+        bugs.append(
+            bug
+        )
+
+        if environment == "UAT":
+
+            uat_bugs.append(
+                bug
+            )
+
+        elif environment == "PROD":
+
+            prod_bugs.append(
+                bug
+            )
+
+        else:
+
+            sit_bugs.append(
+                bug
+            )
+
+    return {
+        "bugs": bugs,
+
+        "total": len(
+            bugs
+        ),
+
+        "sit_bugs": sit_bugs,
+
+        "sit_total": len(
+            sit_bugs
+        ),
+
+        "uat_bugs": uat_bugs,
+
+        "uat_total": len(
+            uat_bugs
+        ),
+
+        "prod_bugs": prod_bugs,
+
+        "prod_total": len(
+            prod_bugs
+        ),
+    }
+
+# ============================================================
 # GET Jira Configuration
 # ============================================================
 
