@@ -193,3 +193,38 @@ export async function getLatestReleaseAutomationUpload(
 
   return response.data;
 }
+
+// ============================================================
+// QE MONTHLY SNAPSHOT
+// ============================================================
+
+export async function createQESnapshot(
+  projectId
+) {
+  const response = await apiClient.post(
+    `/projects/${projectId}/qe/snapshot`
+  );
+
+  return response.data;
+}
+
+
+// ============================================================
+// QE HISTORICAL TRENDS
+// ============================================================
+
+export async function getQETrends(
+  projectId,
+  months = 6
+) {
+  const response = await apiClient.get(
+    `/projects/${projectId}/qe/trends`,
+    {
+      params: {
+        months,
+      },
+    }
+  );
+
+  return response.data;
+}
