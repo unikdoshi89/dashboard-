@@ -1414,16 +1414,16 @@ async def get_jira_bugs(
                 ),
 
             "bugs":
-                bugs[start:end],
+                bugs,
 
             "sit_bugs":
-                sit_bugs[start:end],
+                sit_bugs,
 
             "uat_bugs":
-                uat_bugs[start:end],
+                uat_bugs,
 
             "prod_bugs":
-                prod_bugs[start:end],
+                prod_bugs,
         }
 
     # ========================================================
@@ -1572,16 +1572,16 @@ async def get_jira_bugs(
             ),
 
         "bugs":
-            bugs[start:end],
+            bugs,
 
         "sit_bugs":
-            sit_bugs[start:end],
+            sit_bugs,
 
         "uat_bugs":
-            uat_bugs[start:end],
+            uat_bugs,
 
         "prod_bugs":
-            prod_bugs[start:end],
+            prod_bugs,
     }
 
 
