@@ -8,6 +8,9 @@ from app.models.project_qe_monthly_snapshot import (
     ProjectQEMonthlySnapshot,
 )
 from app.models.uploaded_test_case import UploadedTestCase
+from app.models.automation_upload_batch import (
+    AutomationUploadBatch,
+)
 
 from app.api.routes.jira import (
     collect_jira_bug_metrics,
@@ -15,7 +18,20 @@ from app.api.routes.jira import (
 )
 
 
+# ============================================================
+# Snapshot Month
+# ============================================================
+
 def _get_snapshot_month():
+    """
+    Return the first day of the current calendar month.
+
+    Example:
+        2026-10-06
+        ->
+        2026-10-01
+    """
+
     today = date.today()
 
     return date(
@@ -25,23 +41,70 @@ def _get_snapshot_month():
     )
 
 
+# ============================================================
+# Automation Metrics
+# ============================================================
+
 def _calculate_automation_metrics(
     db: Session,
     project_id: int,
 ):
     """
     Calculate automation metrics from the latest
-    uploaded test cases for the project.
+    uploaded test-case batch for the project.
+
+    Metrics:
+        - Total test cases
+        - Automatable test cases
+        - Automated test cases
+        - Automation coverage
     """
 
-    latest_test_cases = (
-        db.query(UploadedTestCase)
+    # --------------------------------------------------------
+    # Find latest upload batch
+    # --------------------------------------------------------
+
+    latest_batch = (
+        db.query(
+            AutomationUploadBatch
+        )
         .filter(
-            UploadedTestCase.project_id
+            AutomationUploadBatch.project_id
             == project_id
         )
         .order_by(
-            UploadedTestCase.id.desc()
+            AutomationUploadBatch.id.desc()
+        )
+        .first()
+    )
+
+    # --------------------------------------------------------
+    # No automation upload yet
+    # --------------------------------------------------------
+
+    if not latest_batch:
+
+        return {
+            "total_test_cases": 0,
+            "automatable_test_cases": 0,
+            "automated_test_cases": 0,
+            "automation_coverage": 0.0,
+        }
+
+    # --------------------------------------------------------
+    # Get test cases belonging to latest batch
+    # --------------------------------------------------------
+
+    latest_test_cases = (
+        db.query(
+            UploadedTestCase
+        )
+        .filter(
+            UploadedTestCase.project_id
+            == project_id,
+
+            UploadedTestCase.upload_batch_id
+            == latest_batch.id,
         )
         .all()
     )
@@ -52,6 +115,10 @@ def _calculate_automation_metrics(
 
     automatable_test_cases = 0
     automated_test_cases = 0
+
+    # --------------------------------------------------------
+    # Calculate automation counts
+    # --------------------------------------------------------
 
     for test_case in latest_test_cases:
 
@@ -87,6 +154,14 @@ def _calculate_automation_metrics(
         }:
             automated_test_cases += 1
 
+    # --------------------------------------------------------
+    # Automation coverage
+    #
+    # Coverage is:
+    #
+    # Automated / Automatable * 100
+    # --------------------------------------------------------
+
     if automatable_test_cases > 0:
 
         automation_coverage = (
@@ -100,10 +175,13 @@ def _calculate_automation_metrics(
 
     return {
         "total_test_cases": total_test_cases,
+
         "automatable_test_cases":
             automatable_test_cases,
+
         "automated_test_cases":
             automated_test_cases,
+
         "automation_coverage":
             round(
                 automation_coverage,
@@ -111,6 +189,10 @@ def _calculate_automation_metrics(
             ),
     }
 
+
+# ============================================================
+# Create / Update QE Monthly Snapshot
+# ============================================================
 
 async def create_or_update_qe_snapshot(
     db: Session,
@@ -122,11 +204,21 @@ async def create_or_update_qe_snapshot(
 
     If a snapshot already exists for the month,
     update it instead of creating a duplicate.
+
+    Jira metrics are collected using the same
+    reusable logic as jira.py:
+
+        SIT JQL
+        UAT JQL
+        PROD JQL
+
+    The underlying Jira service handles pagination,
+    so all Jira pages are fetched.
     """
 
-    # ------------------------------------------------------------
+    # ========================================================
     # Validate project
-    # ------------------------------------------------------------
+    # ========================================================
 
     project = (
         db.query(Project)
@@ -137,89 +229,116 @@ async def create_or_update_qe_snapshot(
     )
 
     if not project:
+
         raise ValueError(
             "Project not found"
         )
 
-    # ------------------------------------------------------------
+    # ========================================================
     # Jira configuration
-    # ------------------------------------------------------------
+    # ========================================================
 
     jira_config = (
-        db.query(JiraConfiguration)
+        db.query(
+            JiraConfiguration
+        )
         .filter(
             JiraConfiguration.project_id
             == project_id,
+
             JiraConfiguration.active.is_(True),
         )
         .first()
     )
 
     if not jira_config:
+
         raise ValueError(
             "Jira is not configured for this project"
         )
 
-    # ------------------------------------------------------------
-    # Get Jira bugs
-    # ------------------------------------------------------------
+    # ========================================================
+    # Jira Bug Metrics
+    #
+    # IMPORTANT:
+    #
+    # This uses the exact reusable Jira logic
+    # added to jira.py.
+    #
+    # It handles:
+    #
+    #   SIT JQL
+    #   UAT JQL
+    #   PROD JQL
+    #
+    # and all Jira pagination.
+    # ========================================================
 
-    jira_result = await search_jira_bugs(
-        jira_url=jira_config.jira_url,
-        jira_email=jira_config.jira_email,
-        jira_api_token=jira_config.jira_api_token,
-        jql=jira_config.jql,
-        environment_field=(
-            jira_config.environment_field
-        ),
-        max_results=200,
-    )
+    try:
 
-    issues = jira_result.get(
-        "issues",
-        [],
-    )
-
-    total_bugs = len(issues)
-
-    sit_bugs = 0
-    uat_bugs = 0
-    prod_bugs = 0
-
-    for issue in issues:
-
-        fields = issue.get(
-            "fields",
-            {},
-        )
-
-        environment = (
-            _get_environment(
-                fields=fields,
-                environment_field=(
-                    jira_config.environment_field
-                ),
-                uat_label=(
-                    jira_config.uat_label
-                ),
-                prod_label=(
-                    jira_config.prod_label
-                ),
+        jira_metrics = (
+            await collect_jira_bug_metrics(
+                config=jira_config,
             )
         )
 
-        if environment == "PROD":
-            prod_bugs += 1
+    except Exception as exc:
 
-        elif environment == "UAT":
-            uat_bugs += 1
+        raise ValueError(
+            f"Unable to fetch Jira bug metrics: {str(exc)}"
+        ) from exc
 
-        else:
-            sit_bugs += 1
+    total_bugs = jira_metrics.get(
+        "total",
+        0,
+    )
 
-    # ------------------------------------------------------------
-    # Automation
-    # ------------------------------------------------------------
+    sit_bugs = jira_metrics.get(
+        "sit_total",
+        0,
+    )
+
+    uat_bugs = jira_metrics.get(
+        "uat_total",
+        0,
+    )
+
+    prod_bugs = jira_metrics.get(
+        "prod_total",
+        0,
+    )
+
+    # ========================================================
+    # Jira Feature Metrics
+    #
+    # Uses the same feature JQL logic already present
+    # in jira.py.
+    #
+    # This also uses the paginated Jira search service.
+    # ========================================================
+
+    try:
+
+        feature_metrics = (
+            await collect_jira_feature_metrics(
+                config=jira_config,
+            )
+        )
+
+    except Exception as exc:
+
+        raise ValueError(
+            f"Unable to fetch Jira feature metrics: {str(exc)}"
+        ) from exc
+
+    total_features = feature_metrics.get(
+        "total",
+        0,
+    )
+
+    # ========================================================
+    # Automation Metrics
+    # ========================================================
 
     automation_metrics = (
         _calculate_automation_metrics(
@@ -228,17 +347,17 @@ async def create_or_update_qe_snapshot(
         )
     )
 
-    # ------------------------------------------------------------
-    # Current snapshot month
-    # ------------------------------------------------------------
+    # ========================================================
+    # Current Snapshot Month
+    # ========================================================
 
     snapshot_month = (
         _get_snapshot_month()
     )
 
-    # ------------------------------------------------------------
-    # Find existing snapshot
-    # ------------------------------------------------------------
+    # ========================================================
+    # Find Existing Snapshot
+    # ========================================================
 
     snapshot = (
         db.query(
@@ -254,34 +373,48 @@ async def create_or_update_qe_snapshot(
         .first()
     )
 
+    # ========================================================
+    # Create Snapshot If It Does Not Exist
+    # ========================================================
+
     if not snapshot:
 
-        snapshot = ProjectQEMonthlySnapshot(
-            project_id=project_id,
-            snapshot_month=snapshot_month,
+        snapshot = (
+            ProjectQEMonthlySnapshot(
+                project_id=project_id,
+                snapshot_month=snapshot_month,
+            )
         )
 
         db.add(snapshot)
 
-    # ------------------------------------------------------------
-    # Update values
-    # ------------------------------------------------------------
+    # ========================================================
+    # Update Jira Metrics
+    # ========================================================
 
-    snapshot.total_bugs = total_bugs
-    snapshot.sit_bugs = sit_bugs
-    snapshot.uat_bugs = uat_bugs
-    snapshot.prod_bugs = prod_bugs
+    snapshot.total_bugs = (
+        total_bugs
+    )
 
-    # Feature count can be added using the existing
-    # feature search once we wire that into the service.
-    #
-    # Keeping it zero here prevents us from duplicating
-    # feature/JQL logic incorrectly.
-    #
-    # We will wire this to your existing feature endpoint
-    # in the next step.
+    snapshot.sit_bugs = (
+        sit_bugs
+    )
 
-    snapshot.total_features = 0
+    snapshot.uat_bugs = (
+        uat_bugs
+    )
+
+    snapshot.prod_bugs = (
+        prod_bugs
+    )
+
+    snapshot.total_features = (
+        total_features
+    )
+
+    # ========================================================
+    # Update Automation Metrics
+    # ========================================================
 
     snapshot.total_test_cases = (
         automation_metrics[
@@ -307,92 +440,22 @@ async def create_or_update_qe_snapshot(
         ]
     )
 
+    # ========================================================
+    # Snapshot Timestamp
+    # ========================================================
+
     snapshot.snapshot_date = (
         datetime.utcnow()
     )
 
+    # ========================================================
+    # Save
+    # ========================================================
+
     db.commit()
 
-    db.refresh(snapshot)
+    db.refresh(
+        snapshot
+    )
 
     return snapshot
-
-
-def _get_environment(
-    fields,
-    environment_field=None,
-    uat_label=None,
-    prod_label=None,
-):
-    """
-    Local environment classification for snapshots.
-    """
-
-    if environment_field:
-
-        value = fields.get(
-            environment_field
-        )
-
-        if isinstance(value, dict):
-
-            value = (
-                value.get("value")
-                or value.get("name")
-                or value.get("displayName")
-            )
-
-        if value:
-
-            normalized = (
-                str(value)
-                .strip()
-                .upper()
-            )
-
-            if normalized == "PROD":
-                return "PROD"
-
-            if normalized == "UAT":
-                return "UAT"
-
-            if normalized == "SIT":
-                return "SIT"
-
-    labels = fields.get(
-        "labels"
-    ) or []
-
-    normalized_labels = {
-        str(label).strip().lower()
-        for label in labels
-        if str(label).strip()
-    }
-
-    if prod_label:
-
-        prod_labels = {
-            x.strip().lower()
-            for x in str(
-                prod_label
-            ).split(",")
-            if x.strip()
-        }
-
-        if prod_labels & normalized_labels:
-            return "PROD"
-
-    if uat_label:
-
-        uat_labels = {
-            x.strip().lower()
-            for x in str(
-                uat_label
-            ).split(",")
-            if x.strip()
-        }
-
-        if uat_labels & normalized_labels:
-            return "UAT"
-
-    return "SIT"
