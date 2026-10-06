@@ -647,6 +647,79 @@ def get_jira_config(
         ),
     }
 
+# ============================================================
+# Reusable Jira Feature Metrics
+# ============================================================
+
+async def collect_jira_feature_metrics(
+    config: JiraConfiguration,
+):
+    """
+    Fetch ALL Jira features for QE snapshot purposes.
+    """
+
+    feature_jql = (
+        config.feature_jql
+        or ""
+    ).strip()
+
+    if not feature_jql:
+
+        base_jql = (
+            config.jql
+            or ""
+        ).strip()
+
+        if not base_jql:
+
+            raise RuntimeError(
+                "Jira JQL is not configured."
+            )
+
+        feature_jql = (
+            f"({base_jql}) "
+            "AND issuetype in "
+            "(Story, Task, Epic)"
+        )
+
+    environment_field = (
+        getattr(
+            config,
+            "environment_field",
+            None,
+        )
+        or ""
+    ).strip()
+
+    jira_data = (
+        await search_jira_features(
+            jira_url=config.jira_url,
+            jira_email=config.jira_email,
+            jira_api_token=config.jira_api_token,
+            jql=feature_jql,
+            environment_field=(
+                environment_field or None
+            ),
+            max_results=100,
+        )
+    )
+
+    return {
+        "features":
+            jira_data.get(
+                "issues",
+                [],
+            ),
+
+        "total":
+            len(
+                jira_data.get(
+                    "issues",
+                    [],
+                )
+            ),
+    }
+
 
 # ============================================================
 # CREATE / UPDATE Jira Configuration
