@@ -727,6 +727,17 @@ useEffect(() => {
       </button>
 
       <button
+  type="button"
+  onClick={() => {
+    setShowDetailsMenu(false);
+    navigate(`/qe-trends/${selectedProjectId}`);
+  }}
+  className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50"
+>
+  QE Trends
+</button>
+
+      <button
         type="button"
         onClick={() => {
           setShowDetailsMenu(false);
