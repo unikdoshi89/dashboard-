@@ -1068,15 +1068,23 @@ async def get_jira_bugs(
     search: str | None = Query(
         default=None
     ),
-    page: int = Query(
-        default=1,
-        ge=1,
-    ),
-    per_page: int = Query(
-        default=20,
-        ge=5,
-        le=200,
-    ),
+    all_page: int = Query(
+    default=1,
+    ge=1,
+),
+uat_page: int = Query(
+    default=1,
+    ge=1,
+),
+prod_page: int = Query(
+    default=1,
+    ge=1,
+),
+per_page: int = Query(
+    default=50,
+    ge=5,
+    le=200,
+),
     db: Session = Depends(get_db),
 ):
 
