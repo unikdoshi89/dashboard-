@@ -77,6 +77,24 @@ def build_search_jql(
     )
 
 
+def paginate_jira_items(
+    items: list,
+    page: int,
+    per_page: int,
+):
+    """Paginate an already-fetched Jira issue list."""
+    total = len(items)
+    pages = ((total + per_page - 1) // per_page) if total > 0 else 0
+    start = (page - 1) * per_page
+    end = start + per_page
+    return {
+        "items": items[start:end],
+        "page": page,
+        "per_page": per_page,
+        "total": total,
+        "pages": pages,
+    }
+
 def normalize_jira_issue(
     issue,
     environment_field=None,
@@ -1127,14 +1145,25 @@ per_page: int = Query(
             "configured": False,
             "project_id": project_id,
             "project_name": project.name,
+            "per_page": per_page,
+            "page": all_page,
+            "all_page": all_page,
+            "all_total": 0,
+            "all_pages": 0,
             "total": 0,
-            "uat_total": 0,
-            "prod_total": 0,
+            "pages": 0,
             "sit_total": 0,
-            "bugs": [],
+            "sit_pages": 0,
             "sit_bugs": [],
+            "uat_page": uat_page,
+            "uat_total": 0,
+            "uat_pages": 0,
             "uat_bugs": [],
+            "prod_page": prod_page,
+            "prod_total": 0,
+            "prod_pages": 0,
             "prod_bugs": [],
+            "bugs": [],
         }
 
     # ========================================================
@@ -1359,14 +1388,28 @@ per_page: int = Query(
             all_bugs_by_key.values()
         )
 
-        total = len(bugs)
+        all_result = paginate_jira_items(
+            bugs,
+            all_page,
+            per_page,
+        )
 
-        start = (
-            page - 1
-        ) * per_page
+        sit_result = paginate_jira_items(
+            sit_bugs,
+            1,
+            per_page,
+        )
 
-        end = (
-            start + per_page
+        uat_result = paginate_jira_items(
+            uat_bugs,
+            uat_page,
+            per_page,
+        )
+
+        prod_result = paginate_jira_items(
+            prod_bugs,
+            prod_page,
+            per_page,
         )
 
         return {
@@ -1394,44 +1437,61 @@ per_page: int = Query(
                 environment_field or None,
 
             "page":
-                page,
+                all_result["page"],
+
+            "all_page":
+                all_result["page"],
 
             "per_page":
                 per_page,
 
             "total":
-                total,
+                all_result["total"],
+
+            "all_total":
+                all_result["total"],
 
             "sit_total":
-                len(sit_bugs),
+                sit_result["total"],
+
+            "sit_pages":
+                sit_result["pages"],
+
+            "uat_page":
+                uat_result["page"],
 
             "uat_total":
-                len(uat_bugs),
+                uat_result["total"],
+
+            "uat_pages":
+                uat_result["pages"],
+
+            "prod_page":
+                prod_result["page"],
 
             "prod_total":
-                len(prod_bugs),
+                prod_result["total"],
+
+            "prod_pages":
+                prod_result["pages"],
 
             "pages":
-                (
-                    total // per_page
-                )
-                + (
-                    1
-                    if total % per_page
-                    else 0
-                ),
+                all_result["pages"],
+
+            "all_pages":
+                all_result["pages"],
 
             "bugs":
-                bugs,
+                all_result["items"],
 
             "sit_bugs":
-                sit_bugs,
+                sit_result["items"],
 
             "uat_bugs":
-                uat_bugs,
+                uat_result["items"],
 
             "prod_bugs":
-                prod_bugs,
+                prod_result["items"],
         }
 
     # ========================================================
@@ -1515,16 +1575,28 @@ per_page: int = Query(
                 bug
             )
 
-    total = len(
-        bugs
+    all_result = paginate_jira_items(
+        bugs,
+        all_page,
+        per_page,
     )
 
-    start = (
-        page - 1
-    ) * per_page
+    sit_result = paginate_jira_items(
+        sit_bugs,
+        1,
+        per_page,
+    )
 
-    end = (
-        start + per_page
+    uat_result = paginate_jira_items(
+        uat_bugs,
+        uat_page,
+        per_page,
+    )
+
+    prod_result = paginate_jira_items(
+        prod_bugs,
+        prod_page,
+        per_page,
     )
 
     return {
@@ -1552,44 +1624,61 @@ per_page: int = Query(
             environment_field or None,
 
         "page":
-            page,
+            all_result["page"],
+
+        "all_page":
+            all_result["page"],
 
         "per_page":
             per_page,
 
         "total":
-            total,
+            all_result["total"],
+
+        "all_total":
+            all_result["total"],
 
         "sit_total":
-            len(sit_bugs),
+            sit_result["total"],
+
+        "sit_pages":
+            sit_result["pages"],
+
+        "uat_page":
+            uat_result["page"],
 
         "uat_total":
-            len(uat_bugs),
+            uat_result["total"],
+
+        "uat_pages":
+            uat_result["pages"],
+
+        "prod_page":
+            prod_result["page"],
 
         "prod_total":
-            len(prod_bugs),
+            prod_result["total"],
+
+        "prod_pages":
+            prod_result["pages"],
 
         "pages":
-            (
-                total // per_page
-            )
-            + (
-                1
-                if total % per_page
-                else 0
-            ),
+            all_result["pages"],
+
+        "all_pages":
+            all_result["pages"],
 
         "bugs":
-            bugs,
+            all_result["items"],
 
         "sit_bugs":
-            sit_bugs,
+            sit_result["items"],
 
         "uat_bugs":
-            uat_bugs,
+            uat_result["items"],
 
         "prod_bugs":
-            prod_bugs,
+            prod_result["items"],
     }
 
 
