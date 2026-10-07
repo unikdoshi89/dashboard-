@@ -37,14 +37,18 @@ export async function testJiraConnection(
 export async function getJiraBugs(
   projectId,
   search = "",
-  page = 1,
-  perPage = 200
+  allPage = 1,
+  uatPage = 1,
+  prodPage = 1,
+  perPage = 50
 ) {
   const response = await apiClient.get(
     `/projects/${projectId}/jira/bugs`,
     {
       params: {
-        page,
+        all_page: allPage,
+        uat_page: uatPage,
+        prod_page: prodPage,
         per_page: perPage,
         ...(search ? { search } : {}),
       },
@@ -53,7 +57,6 @@ export async function getJiraBugs(
 
   return response.data;
 }
-
 export async function getJiraFeatures(
   projectId,
   page = 1,
