@@ -71,6 +71,18 @@ function JiraDetails() {
   const [activeTab, setActiveTab] = useState("all");
   const [environmentField, setEnvironmentField] = useState("");
 
+  // Bug pagination
+  const [bugPerPage] = useState(50);
+  const [allBugPage, setAllBugPage] = useState(1);
+  const [uatBugPage, setUatBugPage] = useState(1);
+  const [prodBugPage, setProdBugPage] = useState(1);
+  const [allBugTotal, setAllBugTotal] = useState(0);
+  const [uatBugTotal, setUatBugTotal] = useState(0);
+  const [prodBugTotal, setProdBugTotal] = useState(0);
+  const [allBugPages, setAllBugPages] = useState(0);
+  const [uatBugPages, setUatBugPages] = useState(0);
+  const [prodBugPages, setProdBugPages] = useState(0);
+
   // ============================================================
   // Jira Features / Stories
   // ============================================================
@@ -236,7 +248,10 @@ function JiraDetails() {
   // ============================================================
 
   async function loadBugs(
-    searchValue = search
+    searchValue = search,
+    allPage = allBugPage,
+    uatPage = uatBugPage,
+    prodPage = prodBugPage
   ) {
     try {
       setLoadingBugs(true);
@@ -244,50 +259,52 @@ function JiraDetails() {
 
       const data = await getJiraBugs(
         projectId,
-        searchValue
+        searchValue,
+        allPage,
+        uatPage,
+        prodPage,
+        bugPerPage
       );
 
       if (!data.configured) {
         setBugs([]);
         setUatBugs([]);
         setProdBugs([]);
+        setAllBugTotal(0);
+        setUatBugTotal(0);
+        setProdBugTotal(0);
+        setAllBugPages(0);
+        setUatBugPages(0);
+        setProdBugPages(0);
         setConfigured(false);
         return;
       }
 
       setConfigured(true);
+      setBugs(Array.isArray(data.bugs) ? data.bugs : []);
+      setUatBugs(Array.isArray(data.uat_bugs) ? data.uat_bugs : []);
+      setProdBugs(Array.isArray(data.prod_bugs) ? data.prod_bugs : []);
 
-      setBugs(
-        Array.isArray(data.bugs)
-          ? data.bugs
-          : []
-      );
-
-      setUatBugs(
-        Array.isArray(data.uat_bugs)
-          ? data.uat_bugs
-          : []
-      );
-
-      setProdBugs(
-        Array.isArray(data.prod_bugs)
-          ? data.prod_bugs
-          : []
-      );
+      setAllBugTotal(Number(data.all_total ?? data.total ?? 0));
+      setUatBugTotal(Number(data.uat_total ?? 0));
+      setProdBugTotal(Number(data.prod_total ?? 0));
+      setAllBugPages(Number(data.all_pages ?? data.pages ?? 0));
+      setUatBugPages(Number(data.uat_pages ?? 0));
+      setProdBugPages(Number(data.prod_pages ?? 0));
     } catch (err) {
-      console.error(
-        "Unable to load Jira bugs:",
-        err
-      );
-
+      console.error("Unable to load Jira bugs:", err);
       setBugsError(
-        err?.response?.data?.detail ||
-        "Unable to fetch Jira issues."
+        err?.response?.data?.detail || "Unable to fetch Jira issues."
       );
-
       setBugs([]);
       setUatBugs([]);
       setProdBugs([]);
+      setAllBugTotal(0);
+      setUatBugTotal(0);
+      setProdBugTotal(0);
+      setAllBugPages(0);
+      setUatBugPages(0);
+      setProdBugPages(0);
     } finally {
       setLoadingBugs(false);
     }
@@ -415,9 +432,13 @@ function JiraDetails() {
         "Jira configuration saved successfully."
       );
 
-      // Reset feature search/page before reloading.
+      // Reset feature and bug search/page before reloading.
       setFeatureSearch("");
       setFeaturePage(1);
+      setSearch("");
+      setAllBugPage(1);
+      setUatBugPage(1);
+      setProdBugPage(1);
 
       // Reload both sections only after the save has completed.
       // This prevents the old `configured` state from causing the
@@ -489,12 +510,32 @@ function JiraDetails() {
   async function handleSearch(event) {
     event.preventDefault();
 
-    await loadBugs(search);
+    setAllBugPage(1);
+    setUatBugPage(1);
+    setProdBugPage(1);
+
+    await loadBugs(search, 1, 1, 1);
   }
 
   function handleClearSearch() {
     setSearch("");
-    loadBugs("");
+    setAllBugPage(1);
+    setUatBugPage(1);
+    setProdBugPage(1);
+    loadBugs("", 1, 1, 1);
+  }
+
+  function handleBugPageChange(tab, nextPage) {
+    if (tab === "all") {
+      setAllBugPage(nextPage);
+      loadBugs(search, nextPage, uatBugPage, prodBugPage);
+    } else if (tab === "uat") {
+      setUatBugPage(nextPage);
+      loadBugs(search, allBugPage, nextPage, prodBugPage);
+    } else {
+      setProdBugPage(nextPage);
+      loadBugs(search, allBugPage, uatBugPage, nextPage);
+    }
   }
 
   // ============================================================
@@ -571,6 +612,27 @@ function JiraDetails() {
       : activeTab === "prod"
         ? prodBugs
         : bugs;
+
+  const visibleBugTotal =
+    activeTab === "uat"
+      ? uatBugTotal
+      : activeTab === "prod"
+        ? prodBugTotal
+        : allBugTotal;
+
+  const visibleBugPage =
+    activeTab === "uat"
+      ? uatBugPage
+      : activeTab === "prod"
+        ? prodBugPage
+        : allBugPage;
+
+  const visibleBugPages =
+    activeTab === "uat"
+      ? uatBugPages
+      : activeTab === "prod"
+        ? prodBugPages
+        : allBugPages;
 
   // ============================================================
   // Helpers
@@ -1298,7 +1360,7 @@ function JiraDetails() {
                         : "bg-gray-100 text-gray-600"
                     }`}
                   >
-                    {bugs.length}
+                    {allBugTotal}
                   </span>
 
                 </button>
@@ -1327,7 +1389,7 @@ function JiraDetails() {
                         : "bg-gray-100 text-gray-600"
                     }`}
                   >
-                    {uatBugs.length}
+                    {uatBugTotal}
                   </span>
 
                 </button>
@@ -1356,7 +1418,7 @@ function JiraDetails() {
                         : "bg-gray-100 text-gray-600"
                     }`}
                   >
-                    {prodBugs.length}
+                    {prodBugTotal}
                   </span>
 
                 </button>
@@ -1441,6 +1503,12 @@ function JiraDetails() {
 
                       <span className="font-semibold">
                         {visibleBugs.length}
+                      </span>{" "}
+
+                      of{" "}
+
+                      <span className="font-semibold">
+                        {visibleBugTotal}
                       </span>{" "}
 
                       issues
@@ -1711,6 +1779,56 @@ function JiraDetails() {
           </div>
         )}
 
+
+        {configured &&
+          visibleBugTotal > 0 &&
+          visibleBugPages > 1 && (
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm px-6 py-4 flex items-center justify-between">
+              <p className="text-sm text-gray-500">
+                Page{" "}
+                <span className="font-semibold text-gray-900">
+                  {visibleBugPage}
+                </span>{" "}
+                of{" "}
+                <span className="font-semibold text-gray-900">
+                  {visibleBugPages}
+                </span>
+              </p>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleBugPageChange(
+                      activeTab,
+                      Math.max(1, visibleBugPage - 1)
+                    )
+                  }
+                  disabled={visibleBugPage === 1 || loadingBugs}
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  Previous
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleBugPageChange(
+                      activeTab,
+                      Math.min(visibleBugPages, visibleBugPage + 1)
+                    )
+                  }
+                  disabled={
+                    visibleBugPage >= visibleBugPages ||
+                    loadingBugs
+                  }
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
 
         {/* ====================================================
             Features & Stories
