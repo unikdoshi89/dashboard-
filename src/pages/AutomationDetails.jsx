@@ -35,6 +35,20 @@ import AddAutomationPodModal from "../components/AddAutomationPodModal";
 import EditAutomationPodModal from "../components/EditAutomationPodModal";
 
 
+function getExecutionStatus(status) {
+  const normalized = String(status || "").trim().toLowerCase();
+
+  if (normalized === "pass" || normalized === "passed") {
+    return "Pass";
+  }
+
+  if (normalized === "fail" || normalized === "failed") {
+    return "Fail";
+  }
+
+  return "Not Executed";
+}
+
 function AutomationDetails() {
 
   // ==================================================
@@ -106,6 +120,13 @@ function AutomationDetails() {
 
   const [releaseUploads, setReleaseUploads] =
     useState({});
+
+  const [executionSummary, setExecutionSummary] =
+    useState({
+      pass: 0,
+      fail: 0,
+      notExecuted: 0,
+    });
 
 
   // ==================================================
@@ -296,10 +317,6 @@ function AutomationDetails() {
       );
       setUploadMessageType("success");
       setSelectedFile(null);
-
-      // Refresh the main automation response so the release totals
-      // and top summary cards immediately reflect the uploaded Excel.
-      await loadAutomation();
 
       await loadLatestAutomationUploadForRelease(releaseId);
     } catch (err) {
@@ -667,7 +684,7 @@ function AutomationDetails() {
                 grid
                 grid-cols-1
                 sm:grid-cols-2
-                lg:grid-cols-6
+                lg:grid-cols-5
                 gap-4
                 mb-8
               "
@@ -709,15 +726,6 @@ function AutomationDetails() {
 
 
               <SummaryCard
-                title="Automated"
-                value={
-                  automation.totals
-                    ?.automated ?? 0
-                }
-              />
-
-
-              <SummaryCard
                 title="Automation Coverage"
                 value={
                   automation.totals
@@ -727,6 +735,21 @@ function AutomationDetails() {
                     ? `${automation.totals.automation_percentage}%`
                     : "—"
                 }
+              />
+
+              <SummaryCard
+                title="Passed"
+                value={executionSummary.pass}
+              />
+
+              <SummaryCard
+                title="Failed"
+                value={executionSummary.fail}
+              />
+
+              <SummaryCard
+                title="Not Executed"
+                value={executionSummary.notExecuted}
               />
 
             </div>
@@ -1201,6 +1224,14 @@ function AutomationDetails() {
                                     <span><strong>Latest Upload:</strong> {releaseUploads[release.id].upload.filename}</span>
                                     <span><strong>Records:</strong> {releaseUploads[release.id].upload.row_count}</span>
                                     <span><strong>Uploaded:</strong> {new Date(releaseUploads[release.id].upload.uploaded_at).toLocaleString()}</span>
+                                    <span>
+                                      <strong>Execution:</strong>{" "}
+                                      Pass: {(releaseUploads[release.id].rows || []).filter((row) => getExecutionStatus(row.status) === "Pass").length}
+                                      {" | "}
+                                      Fail: {(releaseUploads[release.id].rows || []).filter((row) => getExecutionStatus(row.status) === "Fail").length}
+                                      {" | "}
+                                      Not Executed: {(releaseUploads[release.id].rows || []).filter((row) => getExecutionStatus(row.status) === "Not Executed").length}
+                                    </span>
                                   </div>
                                   <div className="overflow-x-auto">
                                     <table className="w-full text-xs min-w-[900px]">
@@ -1224,99 +1255,14 @@ function AutomationDetails() {
                                             <td className="px-3 py-2 font-medium">{row.test_case_id}</td>
                                             <td className="px-3 py-2">{row.owner || "-"}</td>
                                             <td className="px-3 py-2 max-w-[350px] truncate" title={row.test_case_description || ""}>{row.test_case_description || "-"}</td>
-                                            <td className="px-3 py-2">{row.status || "-"}</td>
+                                            <td className="px-3 py-2">{getExecutionStatus(row.status)}</td>
                                             <td className="px-3 py-2 text-center">{row.automatable || "-"}</td>
                                             <td className="px-3 py-2 text-center">{row.automated || "-"}</td>
                                           </tr>
                                         ))}
-
-                                        {/* Uploaded Test Cases Total */}
-                                        <tr className="bg-gray-100 border-t-2 border-gray-300 font-bold">
-                                          <td colSpan="2" className="px-3 py-3 text-gray-900">
-                                            TOTAL
-                                          </td>
-                                          <td className="px-3 py-3 text-gray-900">
-                                            {release.total?.test_cases ?? (releaseUploads[release.id].rows || []).length}
-                                          </td>
-                                          <td colSpan="2" className="px-3 py-3 text-gray-900">
-                                            {release.total?.requirements_rtb ?? 0} unique Jira IDs
-                                          </td>
-                                          <td className="px-3 py-3 text-gray-900">
-                                            —
-                                          </td>
-                                          <td className="px-3 py-3 text-center text-gray-900">
-                                            {release.total?.automatable ?? 0}
-                                          </td>
-                                          <td className="px-3 py-3 text-center text-gray-900">
-                                            {release.total?.automated ?? 0}
-                                          </td>
-                                        </tr>
                                       </tbody>
                                     </table>
                                   </div>
-                                </td>
-                              </tr>
-                            )}
-
-
-                            {/* Release Total Row */}
-
-                            {expanded && (
-                              <tr
-                                className="
-                                  bg-blue-50/40
-                                  border-b
-                                  border-blue-100
-                                  font-semibold
-                                "
-                              >
-                                <td
-                                  className="px-5 py-3 text-gray-500"
-                                >
-                                  ↳
-                                </td>
-
-                                <td
-                                  className="px-5 py-3 text-gray-900"
-                                >
-                                  Release Total
-                                </td>
-
-                                <td
-                                  className="px-5 py-3 text-right text-gray-900"
-                                >
-                                  {release.total?.requirements_rtb ?? 0}
-                                </td>
-
-                                <td
-                                  className="px-5 py-3 text-right text-gray-900"
-                                >
-                                  {release.total?.test_cases ?? 0}
-                                </td>
-
-                                <td
-                                  className="px-5 py-3 text-right text-gray-900"
-                                >
-                                  {release.total?.automatable ?? 0}
-                                </td>
-
-                                <td
-                                  className="px-5 py-3 text-right text-gray-900"
-                                >
-                                  {release.total?.automated ?? 0}
-                                </td>
-
-                                <td
-                                  className="px-5 py-3 text-right text-gray-900"
-                                >
-                                  {release.total?.automation_percentage !== null &&
-                                  release.total?.automation_percentage !== undefined
-                                    ? `${release.total.automation_percentage}%`
-                                    : "—"}
-                                </td>
-
-                                <td className="px-5 py-3 text-center text-xs text-gray-500">
-                                  {release.has_upload ? "Excel" : "POD"}
                                 </td>
                               </tr>
                             )}
