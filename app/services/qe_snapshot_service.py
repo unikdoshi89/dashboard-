@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.models.project import Project
 from app.models.jira_configuration import JiraConfiguration
+from app.models.automation_release import AutomationRelease
 from app.models.project_qe_monthly_snapshot import (
     ProjectQEMonthlySnapshot,
 )
@@ -51,7 +52,7 @@ def _calculate_automation_metrics(
 ):
     """
     Calculate automation metrics from the latest
-    uploaded test-case batch for the project.
+    uploaded test-case batch for each release in the project.
 
     Metrics:
         - Total test cases
@@ -61,98 +62,123 @@ def _calculate_automation_metrics(
     """
 
     # --------------------------------------------------------
-    # Find latest upload batch
+    # Get all releases for the project
     # --------------------------------------------------------
 
-    latest_batch = (
+    releases = (
         db.query(
-            AutomationUploadBatch
+            AutomationRelease
         )
         .filter(
-            AutomationUploadBatch.project_id
+            AutomationRelease.project_id
             == project_id
         )
         .order_by(
-            AutomationUploadBatch.id.desc()
-        )
-        .first()
-    )
-
-    # --------------------------------------------------------
-    # No automation upload yet
-    # --------------------------------------------------------
-
-    if not latest_batch:
-
-        return {
-            "total_test_cases": 0,
-            "automatable_test_cases": 0,
-            "automated_test_cases": 0,
-            "automation_coverage": 0.0,
-        }
-
-    # --------------------------------------------------------
-    # Get test cases belonging to latest batch
-    # --------------------------------------------------------
-
-    latest_test_cases = (
-        db.query(
-            UploadedTestCase
-        )
-        .filter(
-            UploadedTestCase.project_id
-            == project_id,
-
-            UploadedTestCase.upload_batch_id
-            == latest_batch.id,
+            AutomationRelease.release_order,
+            AutomationRelease.id,
         )
         .all()
     )
 
-    total_test_cases = len(
-        latest_test_cases
-    )
-
+    total_test_cases = 0
     automatable_test_cases = 0
     automated_test_cases = 0
 
     # --------------------------------------------------------
-    # Calculate automation counts
+    # Calculate metrics release by release
     # --------------------------------------------------------
 
-    for test_case in latest_test_cases:
+    for release in releases:
 
-        automatable = (
-            str(
-                test_case.automatable
-                or ""
+        # ----------------------------------------------------
+        # Find latest upload batch for this release
+        # ----------------------------------------------------
+
+        latest_batch = (
+            db.query(
+                AutomationUploadBatch
             )
-            .strip()
-            .lower()
+            .filter(
+                AutomationUploadBatch.release_id
+                == release.id
+            )
+            .order_by(
+                AutomationUploadBatch.uploaded_at.desc(),
+                AutomationUploadBatch.id.desc(),
+            )
+            .first()
         )
 
-        automated = (
-            str(
-                test_case.automated
-                or ""
+        # ----------------------------------------------------
+        # No upload for this release
+        # ----------------------------------------------------
+
+        if not latest_batch:
+            continue
+
+        # ----------------------------------------------------
+        # Get test cases belonging to latest batch
+        # ----------------------------------------------------
+
+        latest_test_cases = (
+            db.query(
+                UploadedTestCase
             )
-            .strip()
-            .lower()
+            .filter(
+                UploadedTestCase.project_id
+                == project_id,
+
+                UploadedTestCase.upload_batch_id
+                == latest_batch.id,
+            )
+            .all()
         )
 
-        if automatable in {
-            "yes",
-            "y",
-            "true",
-        }:
-            automatable_test_cases += 1
+        total_test_cases += len(
+            latest_test_cases
+        )
 
-        if automated in {
-            "yes",
-            "y",
-            "true",
-        }:
-            automated_test_cases += 1
+        # ----------------------------------------------------
+        # Calculate automation counts
+        # ----------------------------------------------------
+
+        for test_case in latest_test_cases:
+
+            automatable = (
+                str(
+                    test_case.automatable
+                    or ""
+                )
+                .strip()
+                .lower()
+            )
+
+            automated = (
+                str(
+                    test_case.automated
+                    or ""
+                )
+                .strip()
+                .lower()
+            )
+
+            if automatable in {
+                "yes",
+                "y",
+                "true",
+                "1",
+                "1.0",
+            }:
+                automatable_test_cases += 1
+
+            if automated in {
+                "yes",
+                "y",
+                "true",
+                "1",
+                "1.0",
+            }:
+                automated_test_cases += 1
 
     # --------------------------------------------------------
     # Automation coverage
