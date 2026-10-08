@@ -15,6 +15,15 @@ import {
   ChevronDown,
   ChevronRight,
   Upload,
+  FileText,
+  ClipboardCheck,
+  Target,
+  BarChart3,
+  CheckCircle2,
+  XCircle,
+  Clock3,
+  PieChart,
+  Layers,
 } from "lucide-react";
 
 import {
@@ -127,6 +136,35 @@ function AutomationDetails() {
       fail: 0,
       notExecuted: 0,
     });
+
+
+  // ==================================================
+  // Calculate Execution Summary
+  // ==================================================
+
+  useEffect(() => {
+    const summary = {
+      pass: 0,
+      fail: 0,
+      notExecuted: 0,
+    };
+
+    Object.values(releaseUploads).forEach((releaseUpload) => {
+      (releaseUpload?.rows || []).forEach((row) => {
+        const status = getExecutionStatus(row.status);
+
+        if (status === "Pass") {
+          summary.pass += 1;
+        } else if (status === "Fail") {
+          summary.fail += 1;
+        } else {
+          summary.notExecuted += 1;
+        }
+      });
+    });
+
+    setExecutionSummary(summary);
+  }, [releaseUploads]);
 
 
   // ==================================================
@@ -695,6 +733,9 @@ function AutomationDetails() {
                 value={
                   automation.releases?.length || 0
                 }
+                subtitle="Total releases"
+                icon={LayersIcon}
+                variant="blue"
               />
 
 
@@ -704,6 +745,9 @@ function AutomationDetails() {
                   automation.totals
                     ?.requirements_rtb ?? 0
                 }
+                subtitle="Total requirements"
+                icon={FileText}
+                variant="blue"
               />
 
 
@@ -713,6 +757,9 @@ function AutomationDetails() {
                   automation.totals
                     ?.test_cases ?? 0
                 }
+                subtitle="Total test cases uploaded"
+                icon={ClipboardCheck}
+                variant="purple"
               />
 
 
@@ -722,6 +769,9 @@ function AutomationDetails() {
                   automation.totals
                     ?.automatable ?? 0
                 }
+                subtitle="Test cases identified"
+                icon={Target}
+                variant="orange"
               />
 
 
@@ -735,25 +785,94 @@ function AutomationDetails() {
                     ? `${automation.totals.automation_percentage}%`
                     : "—"
                 }
-              />
-
-              <SummaryCard
-                title="Passed"
-                value={executionSummary.pass}
-              />
-
-              <SummaryCard
-                title="Failed"
-                value={executionSummary.fail}
-              />
-
-              <SummaryCard
-                title="Not Executed"
-                value={executionSummary.notExecuted}
+                subtitle="Automated / Automatable"
+                icon={BarChart3}
+                variant="green"
               />
 
             </div>
 
+
+            {/* ==================================================
+                Overall Execution Status
+                ================================================== */}
+
+            <div
+              className="
+                mb-8
+                bg-gradient-to-br
+                from-slate-50
+                to-white
+                border
+                border-slate-200
+                rounded-xl
+                shadow-sm
+                p-5
+              "
+            >
+
+              <div className="flex items-center gap-3 mb-5">
+                <div className="p-2.5 rounded-xl bg-blue-100 text-blue-700">
+                  <PieChart size={21} />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900">
+                    Overall Execution Status
+                  </h2>
+                  <p className="text-sm text-gray-500 mt-0.5">
+                    Based on latest uploads from all releases
+                  </p>
+                </div>
+              </div>
+
+              <div
+                className="
+                  grid
+                  grid-cols-1
+                  md:grid-cols-3
+                  gap-4
+                "
+              >
+
+                <ExecutionStatusCard
+                  title="Passed"
+                  value={executionSummary.pass}
+                  total={
+                    executionSummary.pass +
+                    executionSummary.fail +
+                    executionSummary.notExecuted
+                  }
+                  icon={CheckCircle2}
+                  variant="green"
+                />
+
+                <ExecutionStatusCard
+                  title="Failed"
+                  value={executionSummary.fail}
+                  total={
+                    executionSummary.pass +
+                    executionSummary.fail +
+                    executionSummary.notExecuted
+                  }
+                  icon={XCircle}
+                  variant="red"
+                />
+
+                <ExecutionStatusCard
+                  title="Not Executed"
+                  value={executionSummary.notExecuted}
+                  total={
+                    executionSummary.pass +
+                    executionSummary.fail +
+                    executionSummary.notExecuted
+                  }
+                  icon={Clock3}
+                  variant="amber"
+                />
+
+              </div>
+
+            </div>
 
             {/* ==================================================
                 Main Automation Card
@@ -1670,7 +1789,6 @@ function AutomationDetails() {
 
 }
 
-
 // ==================================================
 // Summary Card
 // ==================================================
@@ -1678,43 +1796,167 @@ function AutomationDetails() {
 function SummaryCard({
   title,
   value,
+  subtitle,
+  icon: Icon,
+  variant = "blue",
 }) {
+
+  const variants = {
+    blue: {
+      card: "bg-gradient-to-br from-blue-50 to-white border-blue-100",
+      icon: "bg-blue-100 text-blue-700",
+      value: "text-blue-700",
+      accent: "bg-blue-200",
+    },
+    purple: {
+      card: "bg-gradient-to-br from-purple-50 to-white border-purple-100",
+      icon: "bg-purple-100 text-purple-700",
+      value: "text-purple-700",
+      accent: "bg-purple-200",
+    },
+    orange: {
+      card: "bg-gradient-to-br from-amber-50 to-white border-amber-100",
+      icon: "bg-amber-100 text-amber-700",
+      value: "text-amber-700",
+      accent: "bg-amber-200",
+    },
+    green: {
+      card: "bg-gradient-to-br from-emerald-50 to-white border-emerald-100",
+      icon: "bg-emerald-100 text-emerald-700",
+      value: "text-emerald-700",
+      accent: "bg-emerald-200",
+    },
+  };
+
+  const style = variants[variant] || variants.blue;
 
   return (
 
     <div
-      className="
-        bg-white
-        border
-        border-gray-200
-        rounded-xl
-        p-5
-        shadow-sm
-      "
+      className={`relative overflow-hidden border rounded-xl p-5 shadow-sm ${style.card}`}
     >
 
-      <p
-        className="
-          text-sm
-          text-gray-500
-        "
-      >
+      <div className="flex items-start justify-between gap-3">
+
+        <div className={`p-3 rounded-xl ${style.icon}`}>
+          {Icon && <Icon size={23} />}
+        </div>
+
+        <div className="flex items-end gap-1.5 opacity-70 pt-2">
+          <span className={`w-2 h-3 rounded-full ${style.accent}`} />
+          <span className={`w-2 h-5 rounded-full ${style.accent}`} />
+          <span className={`w-2 h-7 rounded-full ${style.accent}`} />
+        </div>
+
+      </div>
+
+      <p className="text-sm font-semibold text-gray-700 mt-4">
         {title}
       </p>
 
-
-      <p
-        className="
-          text-2xl
-          font-bold
-          text-gray-900
-          mt-2
-        "
-      >
+      <p className={`text-2xl font-bold mt-1 ${style.value}`}>
         {value}
       </p>
 
+      {subtitle && (
+        <p className="text-xs text-gray-500 mt-1">
+          {subtitle}
+        </p>
+      )}
+
     </div>
+
+  );
+
+}
+
+
+// ==================================================
+// Execution Status Card
+// ==================================================
+
+function ExecutionStatusCard({
+  title,
+  value,
+  total,
+  icon: Icon,
+  variant = "green",
+}) {
+
+  const variants = {
+    green: {
+      card: "bg-gradient-to-br from-emerald-50 to-white border-emerald-200",
+      icon: "bg-emerald-500 text-white",
+      value: "text-emerald-700",
+      progress: "bg-emerald-500",
+      percent: "text-emerald-700",
+    },
+    red: {
+      card: "bg-gradient-to-br from-red-50 to-white border-red-200",
+      icon: "bg-red-500 text-white",
+      value: "text-red-700",
+      progress: "bg-red-500",
+      percent: "text-red-700",
+    },
+    amber: {
+      card: "bg-gradient-to-br from-amber-50 to-white border-amber-200",
+      icon: "bg-amber-500 text-white",
+      value: "text-amber-700",
+      progress: "bg-amber-500",
+      percent: "text-amber-700",
+    },
+  };
+
+  const style = variants[variant] || variants.green;
+  const percentage = total > 0 ? (value / total) * 100 : 0;
+
+  return (
+
+    <div
+      className={`border rounded-xl p-4 shadow-sm ${style.card}`}
+    >
+
+      <div className="flex items-start justify-between gap-3">
+
+        <div className="flex items-center gap-3">
+          <div className={`p-2.5 rounded-full ${style.icon}`}>
+            {Icon && <Icon size={21} />}
+          </div>
+
+          <div>
+            <p className="text-sm font-semibold text-gray-700">
+              {title}
+            </p>
+            <p className={`text-2xl font-bold mt-0.5 ${style.value}`}>
+              {value}
+            </p>
+          </div>
+        </div>
+
+        <span className={`text-sm font-semibold ${style.percent}`}>
+          {percentage.toFixed(2)}%
+        </span>
+
+      </div>
+
+      <div className="mt-4 h-2 rounded-full bg-gray-200 overflow-hidden">
+        <div
+          className={`h-full rounded-full transition-all duration-500 ${style.progress}`}
+          style={{ width: `${percentage}%` }}
+        />
+      </div>
+
+    </div>
+
+  );
+
+}
+
+
+function LayersIcon({ size = 23 }) {
+  return <Layers size={size} />;
+}
+
 
   );
 
