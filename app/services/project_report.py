@@ -88,6 +88,16 @@ def _is_yes(value):
         "TRUE",
         "1",
     )
+def _execution_status(value):
+    """Normalize uploaded test-case execution status."""
+    normalized = str(value or "").strip().lower()
+    if normalized in {"pass", "passed"}:
+        return "Pass"
+    if normalized in {"fail", "failed"}:
+        return "Fail"
+    return "Not Executed"
+
+
 def _notes_indicate_no_data(notes):
     """
     Return True when metric notes explicitly indicate
@@ -2081,6 +2091,9 @@ def generate_project_report_html(
     total_test_cases = 0
     total_automatable = 0
     total_automated = 0
+    total_passed = 0
+    total_failed = 0
+    total_not_executed = 0
 
     for release in releases:
 
@@ -2154,6 +2167,10 @@ def generate_project_report_html(
                 in {"yes", "y", "true", "1", "1.0"}
             )
 
+            release_passed = sum(1 for row in uploaded_rows if _execution_status(row.status) == "Pass")
+            release_failed = sum(1 for row in uploaded_rows if _execution_status(row.status) == "Fail")
+            release_not_executed = sum(1 for row in uploaded_rows if _execution_status(row.status) == "Not Executed")
+
             automation_percentage = (
                 (release_automated / release_automatable) * 100
                 if release_automatable > 0
@@ -2178,6 +2195,9 @@ def generate_project_report_html(
                             )
                         }
                     </td>
+                    <td class="execution-pass">{release_passed}</td>
+                    <td class="execution-fail">{release_failed}</td>
+                    <td class="execution-not-executed">{release_not_executed}</td>
                 </tr>
                 """
             )
@@ -2186,6 +2206,9 @@ def generate_project_report_html(
             total_test_cases += release_test_cases
             total_automatable += release_automatable
             total_automated += release_automated
+            total_passed += release_passed
+            total_failed += release_failed
+            total_not_executed += release_not_executed
 
         elif details:
             # Backward compatibility for releases which have no Excel upload.
@@ -2218,6 +2241,9 @@ def generate_project_report_html(
                                 )
                             }
                         </td>
+                    <td>—</td>
+                    <td>—</td>
+                    <td>—</td>
                     </tr>
                     """
                 )
@@ -2870,6 +2896,19 @@ body {{
     color: #475569;
 }}
 
+.execution-pass {{ color: #15803d; font-weight: 700; }}
+.execution-fail {{ color: #dc2626; font-weight: 700; }}
+.execution-not-executed {{ color: #d97706; font-weight: 700; }}
+.execution-summary-card {{ border-radius: 12px; padding: 18px 20px; border: 1px solid; }}
+.execution-summary-pass {{ background: #f0fdf4; border-color: #bbf7d0; }}
+.execution-summary-fail {{ background: #fef2f2; border-color: #fecaca; }}
+.execution-summary-not-executed {{ background: #fffbeb; border-color: #fde68a; }}
+.execution-summary-label {{ font-size: 13px; font-weight: 600; color: #475569; }}
+.execution-summary-value {{ font-size: 28px; font-weight: 700; margin-top: 5px; }}
+.execution-summary-pass .execution-summary-value {{ color: #15803d; }}
+.execution-summary-fail .execution-summary-value {{ color: #dc2626; }}
+.execution-summary-not-executed .execution-summary-value {{ color: #d97706; }}
+
 .section-card {{
     background: white;
     border: 1px solid #e2e8f0;
@@ -3334,6 +3373,21 @@ tr:hover td {{
 
             </div>
 
+            <div class="summary-grid" style="margin-top: 16px;">
+                <div class="execution-summary-card execution-summary-pass">
+                    <div class="execution-summary-label">Passed</div>
+                    <div class="execution-summary-value">{total_passed}</div>
+                </div>
+                <div class="execution-summary-card execution-summary-fail">
+                    <div class="execution-summary-label">Failed</div>
+                    <div class="execution-summary-value">{total_failed}</div>
+                </div>
+                <div class="execution-summary-card execution-summary-not-executed">
+                    <div class="execution-summary-label">Not Executed</div>
+                    <div class="execution-summary-value">{total_not_executed}</div>
+                </div>
+            </div>
+
         </section>
 
 
@@ -3361,6 +3415,9 @@ tr:hover td {{
                             <th>Automatable</th>
                             <th>Automated</th>
                             <th>Automation %</th>
+                            <th>Passed</th>
+                            <th>Failed</th>
+                            <th>Not Executed</th>
                         </tr>
 
                     </thead>
@@ -3375,7 +3432,7 @@ tr:hover td {{
                             else
                             '''
                             <tr>
-                                <td colspan="7">
+                                <td colspan="10">
                                     No automation data available.
                                 </td>
                             </tr>
