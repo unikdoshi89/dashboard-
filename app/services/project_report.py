@@ -808,6 +808,24 @@ def generate_project_report_pdf(
 
         for release in releases:
 
+            # Use the latest Excel upload for this release.
+            latest_upload = (
+                db.query(AutomationUploadBatch)
+                .filter(
+                    AutomationUploadBatch.project_id
+                    == project_id,
+                    AutomationUploadBatch.release_id
+                    == release.id,
+                )
+                .order_by(
+                    AutomationUploadBatch.uploaded_at.desc(),
+                    AutomationUploadBatch.id.desc(),
+                )
+                .first()
+            )
+
+            # Keep the existing POD names, but calculate the release
+            # metrics from the latest uploaded Excel.
             details = (
                 db.query(AutomationDetail)
                 .filter(
@@ -820,24 +838,60 @@ def generate_project_report_pdf(
                 .all()
             )
 
-            for detail in details:
+            pod_names = ", ".join(
+                [detail.pod for detail in details if detail.pod]
+            ) or "—"
+
+            if latest_upload:
+                uploaded_rows = (
+                    db.query(UploadedTestCase)
+                    .filter(
+                        UploadedTestCase.upload_batch_id
+                        == latest_upload.id
+                    )
+                    .order_by(
+                        UploadedTestCase.sno,
+                        UploadedTestCase.id,
+                    )
+                    .all()
+                )
+
+                jira_ids = {
+                    str(row.jira_id).strip()
+                    for row in uploaded_rows
+                    if row.jira_id is not None
+                    and str(row.jira_id).strip()
+                }
+
+                release_rtb = len(jira_ids)
+                release_test_cases = len(uploaded_rows)
+                release_automatable = sum(
+                    1
+                    for row in uploaded_rows
+                    if str(row.automatable or "").strip().lower()
+                    in {"yes", "y", "true", "1", "1.0"}
+                )
+                release_automated = sum(
+                    1
+                    for row in uploaded_rows
+                    if str(row.automated or "").strip().lower()
+                    in {"yes", "y", "true", "1", "1.0"}
+                )
+
                 automation_percentage = (
-                    (
-                            detail.automated
-                            / detail.automatable
-                    ) * 100
-                    if detail.automatable > 0
+                    (release_automated / release_automatable) * 100
+                    if release_automatable > 0
                     else None
                 )
 
                 automation_rows.append(
                     [
                         release.release_name,
-                        detail.pod,
-                        detail.requirements_rtb,
-                        detail.test_cases,
-                        detail.automatable,
-                        detail.automated,
+                        pod_names,
+                        release_rtb,
+                        release_test_cases,
+                        release_automatable,
+                        release_automated,
                         (
                             f"{automation_percentage:.2f}%"
                             if automation_percentage is not None
@@ -846,10 +900,40 @@ def generate_project_report_pdf(
                     ]
                 )
 
-                total_rtb += detail.requirements_rtb
-                total_test_cases += detail.test_cases
-                total_automatable += detail.automatable
-                total_automated += detail.automated
+                total_rtb += release_rtb
+                total_test_cases += release_test_cases
+                total_automatable += release_automatable
+                total_automated += release_automated
+
+            elif details:
+                # Backward compatibility for releases which have no Excel upload.
+                for detail in details:
+                    automation_percentage = (
+                        (detail.automated / detail.automatable) * 100
+                        if detail.automatable > 0
+                        else None
+                    )
+
+                    automation_rows.append(
+                        [
+                            release.release_name,
+                            detail.pod,
+                            detail.requirements_rtb,
+                            detail.test_cases,
+                            detail.automatable,
+                            detail.automated,
+                            (
+                                f"{automation_percentage:.2f}%"
+                                if automation_percentage is not None
+                                else "—"
+                            ),
+                        ]
+                    )
+
+                    total_rtb += detail.requirements_rtb
+                    total_test_cases += detail.test_cases
+                    total_automatable += detail.automatable
+                    total_automated += detail.automated
 
         total_automation_percentage = (
             (
@@ -2000,6 +2084,24 @@ def generate_project_report_html(
 
     for release in releases:
 
+        # Use the latest Excel upload for this release.
+        latest_upload = (
+            db.query(AutomationUploadBatch)
+            .filter(
+                AutomationUploadBatch.project_id
+                == project_id,
+                AutomationUploadBatch.release_id
+                == release.id,
+            )
+            .order_by(
+                AutomationUploadBatch.uploaded_at.desc(),
+                AutomationUploadBatch.id.desc(),
+            )
+            .first()
+        )
+
+        # Keep existing POD names for display, while the metrics come
+        # from the latest Excel upload.
         details = (
             db.query(AutomationDetail)
             .filter(
@@ -2012,22 +2114,49 @@ def generate_project_report_html(
             .all()
         )
 
-        for detail in details:
+        pod_names = ", ".join(
+            [detail.pod for detail in details if detail.pod]
+        ) or "—"
 
-            automatable = (
-                detail.automatable or 0
+        if latest_upload:
+            uploaded_rows = (
+                db.query(UploadedTestCase)
+                .filter(
+                    UploadedTestCase.upload_batch_id
+                    == latest_upload.id
+                )
+                .order_by(
+                    UploadedTestCase.sno,
+                    UploadedTestCase.id,
+                )
+                .all()
             )
 
-            automated = (
-                detail.automated or 0
+            jira_ids = {
+                str(row.jira_id).strip()
+                for row in uploaded_rows
+                if row.jira_id is not None
+                and str(row.jira_id).strip()
+            }
+
+            release_rtb = len(jira_ids)
+            release_test_cases = len(uploaded_rows)
+            release_automatable = sum(
+                1
+                for row in uploaded_rows
+                if str(row.automatable or "").strip().lower()
+                in {"yes", "y", "true", "1", "1.0"}
+            )
+            release_automated = sum(
+                1
+                for row in uploaded_rows
+                if str(row.automated or "").strip().lower()
+                in {"yes", "y", "true", "1", "1.0"}
             )
 
             automation_percentage = (
-                (
-                    automated
-                    / automatable
-                ) * 100
-                if automatable > 0
+                (release_automated / release_automatable) * 100
+                if release_automatable > 0
                 else None
             )
 
@@ -2035,11 +2164,11 @@ def generate_project_report_html(
                 f"""
                 <tr>
                     <td>{esc(release.release_name)}</td>
-                    <td>{esc(detail.pod)}</td>
-                    <td>{detail.requirements_rtb or 0}</td>
-                    <td>{detail.test_cases or 0}</td>
-                    <td>{automatable}</td>
-                    <td>{automated}</td>
+                    <td>{esc(pod_names)}</td>
+                    <td>{release_rtb}</td>
+                    <td>{release_test_cases}</td>
+                    <td>{release_automatable}</td>
+                    <td>{release_automated}</td>
                     <td>
                         {
                             (
@@ -2053,16 +2182,50 @@ def generate_project_report_html(
                 """
             )
 
-            total_rtb += (
-                detail.requirements_rtb or 0
-            )
+            total_rtb += release_rtb
+            total_test_cases += release_test_cases
+            total_automatable += release_automatable
+            total_automated += release_automated
 
-            total_test_cases += (
-                detail.test_cases or 0
-            )
+        elif details:
+            # Backward compatibility for releases which have no Excel upload.
+            for detail in details:
 
-            total_automatable += automatable
-            total_automated += automated
+                automatable = detail.automatable or 0
+                automated = detail.automated or 0
+
+                automation_percentage = (
+                    (automated / automatable) * 100
+                    if automatable > 0
+                    else None
+                )
+
+                automation_rows.append(
+                    f"""
+                    <tr>
+                        <td>{esc(release.release_name)}</td>
+                        <td>{esc(detail.pod)}</td>
+                        <td>{detail.requirements_rtb or 0}</td>
+                        <td>{detail.test_cases or 0}</td>
+                        <td>{automatable}</td>
+                        <td>{automated}</td>
+                        <td>
+                            {
+                                (
+                                    f"{automation_percentage:.2f}%"
+                                    if automation_percentage is not None
+                                    else "—"
+                                )
+                            }
+                        </td>
+                    </tr>
+                    """
+                )
+
+                total_rtb += detail.requirements_rtb or 0
+                total_test_cases += detail.test_cases or 0
+                total_automatable += automatable
+                total_automated += automated
 
     total_automation_percentage = (
         (
