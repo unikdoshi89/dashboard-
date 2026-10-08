@@ -1,105 +1,39 @@
-    # ==========================================================
-    # Jira Bugs
-    # ==========================================================
-
-    if jira_config:
-        try:
-            jira_data = await search_jira_bugs(
-                jira_url=jira_config.jira_url,
-                jira_email=jira_config.jira_email,
-                jira_api_token=jira_config.jira_api_token,
-                jql=jira_config.jql,
-            )
-
-            jira_issues = jira_data.get("issues") or []
-
-            print(
-                "HTML REPORT JIRA BUGS FETCHED:",
-                len(jira_issues),
-            )
-
-        except Exception as exc:
-            print(
-                "HTML report Jira bug fetch failed:",
-                repr(exc),
-            )
-
-            jira_issues = []
-
-    # ==========================================================
-    # Jira Bug Summary
-    #
-    # IMPORTANT:
-    # Classification failure must NOT delete Jira issues.
-    # ==========================================================
-
-    for issue in jira_issues:
-
-        try:
-            fields = issue.get("fields") or {}
-
-            labels = fields.get("labels") or []
-
-            environment = get_issue_environment(
-                labels=labels,
-                uat_label=jira_config.uat_label,
-                prod_label=jira_config.prod_label,
-            )
-
-            # Store environment directly on issue.
-            # This will also be available to the HTML generator.
-            issue["_environment"] = environment
-
-            if environment == "UAT":
-                jira_uat += 1
-
-            elif environment == "PROD":
-                jira_prod += 1
-
-        except Exception as exc:
-
-            print(
-                "HTML report Jira issue classification failed:",
-                repr(exc),
-                "issue:",
-                issue.get("key"),
-            )
-
-            # Keep the issue.
-            issue["_environment"] = None
-
-    jira_total = len(jira_issues)
-
-    jira_sit = max(
-        jira_total
-        - jira_uat
-        - jira_prod,
-        0,
-    )
-
-
-
-UPDATE metric_definitions
-SET
-    default_target = 3,
-    warning_threshold = 5,
-    critical_threshold = 8
-WHERE metric_key IN (
-    'prod_bugs_3_months',
-    'prod_bugs_1_month'
-);
-
-
-
-SELECT
-    id,
-    name,
-    default_target,
-    warning_threshold,
-    critical_threshold,
-    direction
-FROM metric_definitions
-WHERE metric_key IN (
-    'prod_bugs_3_months',
-    'prod_bugs_1_month'
-);
+Automation Summary						
+Total Test Cases						
+206						
+Automatable						
+187						
+Automated						
+162						
+Automation %						
+86.63%						
+Release Automation Details						
+Release	POD	Requirements + RTB	Test Cases	Automatable	Automated	Automation %
+Release-0.1	Inspire-gift-city	23	206	187	162	86.63%
+RTM & Automation Summary						
+Jira ID	Test Cases	Automatable	Automated	Not Automated	Automation %	
+Release-0.1  —  NR-Test-Cases.xlsx  (243 test cases)						
+Inspire 100	18	18	3	15	16.67%	
+Inspire 101	21	11	7	4	63.64%	
+Inspire 103	25	0	0	0	—	
+Inspire 22	20	20	17	3	85.00%	
+Inspire 59	26	26	25	1	96.15%	
+Inspire 60	46	46	45	1	97.83%	
+Inspire 61	22	22	22	0	100.00%	
+Inspire 62	22	22	22	0	100.00%	
+Inspire 63	43	31	28	3	90.32%	
+GCA_CR_26_Aug_2026_V01  —  inspire-cr-release.xlsx  (43 test cases)						
+INSPIRE-1205	3	3	1	2	33.33%	
+INSPIRE-1207	2	2	0	2	0.00%	
+INSPIRE-1216	3	3	3	0	100.00%	
+INSPIRE-1230	3	3	3	0	100.00%	
+INSPIRE-1236	6	6	6	0	100.00%	
+Inspire- 1104	4	4	1	3	25.00%	
+Inspire- 1105	1	1	0	1	0.00%	
+Inspire- 1206	4	4	0	4	0.00%	
+Inspire- 1208	3	3	0	3	0.00%	
+Inspire- 1209	2	2	0	2	0.00%	
+Inspire- 1214	3	3	3	0	100.00%	
+Inspire- 1215	3	3	3	0	100.00%	
+Inspire- 1218	4	4	1	3	25.00%	
+Inspire- 1220	2	2	2	0	100.00%	
