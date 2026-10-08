@@ -1095,20 +1095,27 @@ def generate_project_report_pdf(
         # RTM & AUTOMATION DETAIL SUMMARY
         # ==========================================================
 
-        latest_upload = (
-            db.query(AutomationUploadBatch)
-            .filter(
-                AutomationUploadBatch.project_id
-                == project_id
-            )
-            .order_by(
-                AutomationUploadBatch.uploaded_at.desc(),
-                AutomationUploadBatch.id.desc(),
-            )
-            .first()
-        )
+        # Get the latest automation upload for EACH release.
+        release_uploads = []
 
-        if latest_upload:
+        for release in releases:
+            release_upload = (
+                db.query(AutomationUploadBatch)
+                .filter(
+                    AutomationUploadBatch.project_id == project_id,
+                    AutomationUploadBatch.release_id == release.id,
+                )
+                .order_by(
+                    AutomationUploadBatch.uploaded_at.desc(),
+                    AutomationUploadBatch.id.desc(),
+                )
+                .first()
+            )
+
+            if release_upload:
+                release_uploads.append((release, release_upload))
+
+        for release, latest_upload in release_uploads:
 
             rtm_rows = (
                 db.query(UploadedTestCase)
@@ -1131,6 +1138,20 @@ def generate_project_report_pdf(
                     Paragraph(
                         "RTM & Automation Detail",
                         section_style,
+                    )
+                )
+
+                story.append(
+                    Paragraph(
+                        f"Release: {release.release_name}",
+                        ParagraphStyle(
+                            f"RTMRelease_{release.id}",
+                            parent=styles["Heading3"],
+                            fontSize=11,
+                            textColor=colors.HexColor("#334155"),
+                            spaceBefore=5,
+                            spaceAfter=4,
+                        ),
                     )
                 )
 
@@ -2056,22 +2077,25 @@ def generate_project_report_html(
     # RTM
     # ==========================================================
 
-    latest_upload = (
-        db.query(AutomationUploadBatch)
-        .filter(
-            AutomationUploadBatch.project_id
-            == project_id
-        )
-        .order_by(
-            AutomationUploadBatch.uploaded_at.desc(),
-            AutomationUploadBatch.id.desc(),
-        )
-        .first()
-    )
-
     rtm_rows = []
 
-    if latest_upload:
+    for release in releases:
+
+        latest_upload = (
+            db.query(AutomationUploadBatch)
+            .filter(
+                AutomationUploadBatch.project_id == project_id,
+                AutomationUploadBatch.release_id == release.id,
+            )
+            .order_by(
+                AutomationUploadBatch.uploaded_at.desc(),
+                AutomationUploadBatch.id.desc(),
+            )
+            .first()
+        )
+
+        if not latest_upload:
+            continue
 
         uploaded_test_cases = (
             db.query(UploadedTestCase)
@@ -2084,6 +2108,19 @@ def generate_project_report_html(
                 UploadedTestCase.id,
             )
             .all()
+        )
+
+        rtm_rows.append(
+            f"""
+            <tr class="release-row">
+                <td colspan="6">
+                    <strong>{esc(release.release_name)}</strong>
+                    &nbsp;—&nbsp;
+                    {esc(latest_upload.filename)}
+                    &nbsp;({latest_upload.row_count} test cases)
+                </td>
+            </tr>
+            """
         )
 
         jira_summary = defaultdict(
