@@ -12,3 +12,7 @@ curl 'http://localhost:8000/api/projects/4/jira/bugs?all_page=1&uat_page=1&prod_
   -H 'sec-ch-ua: "Not)A;Brand";v="8", "Chromium";v="138", "Google Chrome";v="138"' \
   -H 'sec-ch-ua-mobile: ?1' \
   -H 'sec-ch-ua-platform: "Android"'
+
+
+below is the response 
+{"configured":true,"project_id":4,"project_name":"DigiPass","jql":"project= Digi-Passbook and issuetype = Bug","sit_jql":"","uat_jql":"project= Digi-Passbook and issuetype = Bug and lables = MyMoney_UAT_BUG","prod_jql":"project= Digi-Passbook and issuetype = Bug and lables = DPB_PROD_BUG_Q2_2026","environment_field":null,"page":1,"all_page":1,"per_page":50,"total":0,"all_total":0,"sit_total":0,"sit_pages":0,"uat_page":1,"uat_total":0,"uat_pages":0,"prod_page":1,"prod_total":0,"prod_pages":0,"pages":0,"all_pages":0,"bugs":[],"sit_bugs":[],"uat_bugs":[],"prod_bugs":[]}
