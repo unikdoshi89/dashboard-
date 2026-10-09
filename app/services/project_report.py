@@ -26,6 +26,7 @@ from app.models.automation_release import AutomationRelease
 from app.models.automation_detail import AutomationDetail
 from collections import defaultdict
 from app.models.jira_configuration import JiraConfiguration
+from app.models.project_qe_monthly_snapshot import ProjectQEMonthlySnapshot
 
 from app.models.automation_detail import AutomationUploadBatch
 from app.models.automation_detail import UploadedTestCase
@@ -43,6 +44,19 @@ from app.services.quality_score import (
 
 
 from app.services.jira_service import get_issue_environment
+def _get_qe_trend_snapshots(db: Session, project_id: int, months: int = 6):
+    """Return the most recent QE monthly snapshots in chronological order."""
+    snapshots = (
+        db.query(ProjectQEMonthlySnapshot)
+        .filter(ProjectQEMonthlySnapshot.project_id == project_id)
+        .order_by(ProjectQEMonthlySnapshot.snapshot_month.desc())
+        .limit(max(1, min(months, 24)))
+        .all()
+    )
+    snapshots.reverse()
+    return snapshots
+
+
 def _status_color(status):
     if not status:
         return colors.grey
@@ -770,6 +784,66 @@ def generate_project_report_pdf(
 
         story.append(metric_table)
         story.append(Spacer(1, 8))
+
+    # ==========================================================
+    # QE PERFORMANCE TRENDS
+    # ==========================================================
+
+    trend_snapshots = _get_qe_trend_snapshots(db, project_id, months=6)
+
+    story.append(PageBreak())
+    story.append(Paragraph("QE Performance Trends", section_style))
+    story.append(Paragraph(
+        "Monthly history from saved QE snapshots (latest 6 available months).",
+        small_style,
+    ))
+    story.append(Spacer(1, 8))
+
+    if trend_snapshots:
+        trend_rows = [[
+            "Month", "Total Bugs", "SIT", "UAT", "Prod",
+            "Features", "Test Cases", "Automatable", "Automated", "Coverage"
+        ]]
+        for snapshot in trend_snapshots:
+            month_value = snapshot.snapshot_month
+            month_label = month_value.strftime("%b %Y") if hasattr(month_value, "strftime") else str(month_value)
+            coverage = _safe_float(snapshot.automation_coverage)
+            trend_rows.append([
+                month_label,
+                snapshot.total_bugs or 0,
+                snapshot.sit_bugs or 0,
+                snapshot.uat_bugs or 0,
+                snapshot.prod_bugs or 0,
+                snapshot.total_features or 0,
+                snapshot.total_test_cases or 0,
+                snapshot.automatable_test_cases or 0,
+                snapshot.automated_test_cases or 0,
+                f"{coverage:.1f}%" if coverage is not None else "—",
+            ])
+
+        trend_table = Table(
+            trend_rows,
+            colWidths=[22*mm, 16*mm, 12*mm, 12*mm, 13*mm, 16*mm, 18*mm, 19*mm, 17*mm, 20*mm],
+            repeatRows=1,
+        )
+        trend_table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1E3A8A")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, -1), 7),
+            ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#CBD5E1")),
+            ("ALIGN", (1, 1), (-1, -1), "CENTER"),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("TOPPADDING", (0, 0), (-1, -1), 5),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+        ]))
+        story.append(trend_table)
+    else:
+        story.append(Paragraph(
+            "No monthly QE snapshots are available yet. Create a monthly snapshot to populate this section.",
+            normal_style,
+        ))
+    story.append(Spacer(1, 12))
 
     # ==========================================================
     # AUTOMATION DETAILS
@@ -2683,6 +2757,75 @@ def generate_project_report_html(
         )
     )
 
+    # ==========================================================
+    # QE PERFORMANCE TRENDS (HTML REPORT)
+    # ==========================================================
+
+    qe_trend_snapshots = _get_qe_trend_snapshots(db, project_id, months=6)
+    qe_trend_rows = []
+    for snapshot in qe_trend_snapshots:
+        month_value = snapshot.snapshot_month
+        month_label = month_value.strftime("%b %Y") if hasattr(month_value, "strftime") else str(month_value)
+        coverage = _safe_float(snapshot.automation_coverage)
+        qe_trend_rows.append(f"""
+            <tr>
+                <td>{esc(month_label)}</td>
+                <td>{snapshot.total_bugs or 0}</td>
+                <td>{snapshot.sit_bugs or 0}</td>
+                <td>{snapshot.uat_bugs or 0}</td>
+                <td>{snapshot.prod_bugs or 0}</td>
+                <td>{snapshot.total_features or 0}</td>
+                <td>{snapshot.total_test_cases or 0}</td>
+                <td>{snapshot.automatable_test_cases or 0}</td>
+                <td>{snapshot.automated_test_cases or 0}</td>
+                <td>{f"{coverage:.1f}%" if coverage is not None else "—"}</td>
+            </tr>
+        """)
+
+    qe_trends_section = f"""
+        <section class="section-card">
+            <div class="section-heading">
+                <h2>QE Performance Trends</h2>
+            </div>
+            <p class="metric-description">
+                Monthly history from saved QE snapshots; showing the latest 6 available months.
+            </p>
+            <div class="summary-grid">
+                <div class="summary-card">
+                    <div class="summary-label">Latest Total Bugs</div>
+                    <div class="summary-value">{qe_trend_snapshots[-1].total_bugs if qe_trend_snapshots else "—"}</div>
+                </div>
+                <div class="summary-card">
+                    <div class="summary-label">Latest Production Bugs</div>
+                    <div class="summary-value">{qe_trend_snapshots[-1].prod_bugs if qe_trend_snapshots else "—"}</div>
+                </div>
+                <div class="summary-card">
+                    <div class="summary-label">Latest Features</div>
+                    <div class="summary-value">{qe_trend_snapshots[-1].total_features if qe_trend_snapshots else "—"}</div>
+                </div>
+                <div class="summary-card">
+                    <div class="summary-label">Latest Test Cases</div>
+                    <div class="summary-value">{qe_trend_snapshots[-1].total_test_cases if qe_trend_snapshots else "—"}</div>
+                </div>
+                <div class="summary-card">
+                    <div class="summary-label">Latest Automation Coverage</div>
+                    <div class="summary-value">{(f"{_safe_float(qe_trend_snapshots[-1].automation_coverage):.1f}%" if _safe_float(qe_trend_snapshots[-1].automation_coverage) is not None else "—") if qe_trend_snapshots else "—"}</div>
+                </div>
+            </div>
+            <div class="table-wrapper">
+                <table>
+                    <thead><tr>
+                        <th>Month</th><th>Total Bugs</th><th>SIT</th><th>UAT</th><th>Prod</th>
+                        <th>Features</th><th>Test Cases</th><th>Automatable</th><th>Automated</th><th>Coverage</th>
+                    </tr></thead>
+                    <tbody>
+                        {"".join(qe_trend_rows) if qe_trend_rows else '<tr><td colspan="10">No monthly QE snapshots available. Create a monthly snapshot to populate this section.</td></tr>'}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    """
+
     return f"""
 <!DOCTYPE html>
 <html lang="en">
@@ -3180,6 +3323,13 @@ tr:hover td {{
 
         <button
             class="tab-button"
+            onclick="openTab(event, 'qe-trends')"
+        >
+            QE Trends
+        </button>
+
+        <button
+            class="tab-button"
             onclick="openTab(event, 'automation')"
         >
             Automation Details
@@ -3305,6 +3455,16 @@ tr:hover td {{
 
         {"".join(metric_sections)}
 
+    </div>
+
+    <!-- ======================================================
+         QE TRENDS
+         ====================================================== -->
+    <div
+        id="qe-trends"
+        class="tab-content"
+    >
+        {qe_trends_section}
     </div>
 
 
