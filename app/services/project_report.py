@@ -2763,6 +2763,80 @@ def generate_project_report_html(
 
     qe_trend_snapshots = _get_qe_trend_snapshots(db, project_id, months=6)
     qe_trend_rows = []
+
+    # Build self-contained SVG charts using the saved monthly QE snapshots.
+    def _svg_grouped_bar_chart(labels, series, width=760, height=260):
+        if not labels:
+            return '<p class="chart-empty">No monthly snapshot data available yet.</p>'
+        left, right, top, bottom = 48, 18, 24, 52
+        plot_w, plot_h = width - left - right, height - top - bottom
+        all_values = [float(v or 0) for item in series for v in item["values"]]
+        max_value = max(all_values, default=0)
+        max_value = max_value * 1.15 if max_value > 0 else 1
+        group_w = plot_w / len(labels)
+        bar_w = min(28, max(7, group_w / (len(series) * 2.2)))
+        chart_colors = ["#2563eb", "#f97316", "#16a34a"]
+        parts = [f'<svg class="trend-chart" viewBox="0 0 {width} {height}" role="img" aria-label="Monthly trend bar chart">', '<rect width="100%" height="100%" rx="10" fill="#ffffff"/>']
+        for tick in range(5):
+            value = max_value * tick / 4
+            y = top + plot_h - value / max_value * plot_h
+            parts.append(f'<line x1="{left}" y1="{y:.1f}" x2="{width-right}" y2="{y:.1f}" stroke="#e2e8f0"/>')
+            parts.append(f'<text x="{left-8}" y="{y+4:.1f}" text-anchor="end" font-size="10" fill="#64748b">{value:.0f}</text>')
+        for i, label in enumerate(labels):
+            center = left + group_w * (i + 0.5)
+            total_bar_width = len(series) * bar_w + (len(series) - 1) * 4
+            start_x = center - total_bar_width / 2
+            for j, item in enumerate(series):
+                val = float(item["values"][i] or 0)
+                bar_h = val / max_value * plot_h
+                x, y = start_x + j * (bar_w + 4), top + plot_h - bar_h
+                parts.append(f'<rect x="{x:.1f}" y="{y:.1f}" width="{bar_w:.1f}" height="{max(0, bar_h):.1f}" rx="3" fill="{chart_colors[j % len(chart_colors)]}"><title>{esc(item["name"])}: {val:g}</title></rect>')
+            parts.append(f'<text x="{center:.1f}" y="{height-28}" text-anchor="middle" font-size="10" fill="#475569">{esc(label)}</text>')
+        for j, item in enumerate(series):
+            x = left + j * 150
+            parts.append(f'<rect x="{x}" y="{height-14}" width="9" height="9" rx="2" fill="{chart_colors[j % len(chart_colors)]}"/>')
+            parts.append(f'<text x="{x+14}" y="{height-6}" font-size="10" fill="#475569">{esc(item["name"])}</text>')
+        parts.append('</svg>')
+        return "".join(parts)
+
+    def _svg_line_chart(labels, values, width=760, height=260):
+        if not labels:
+            return '<p class="chart-empty">No monthly snapshot data available yet.</p>'
+        left, right, top, bottom = 48, 18, 24, 52
+        plot_w, plot_h = width - left - right, height - top - bottom
+        clean_values = [max(0.0, min(100.0, float(v or 0))) for v in values]
+        parts = [f'<svg class="trend-chart" viewBox="0 0 {width} {height}" role="img" aria-label="Monthly automation coverage trend">', '<rect width="100%" height="100%" rx="10" fill="#ffffff"/>']
+        points = []
+        for tick in range(5):
+            value = 100 * tick / 4
+            y = top + plot_h - value / 100 * plot_h
+            parts.append(f'<line x1="{left}" y1="{y:.1f}" x2="{width-right}" y2="{y:.1f}" stroke="#e2e8f0"/>')
+            parts.append(f'<text x="{left-8}" y="{y+4:.1f}" text-anchor="end" font-size="10" fill="#64748b">{value:.0f}%</text>')
+        for i, (label, value) in enumerate(zip(labels, clean_values)):
+            x = left + plot_w * (i / max(1, len(labels) - 1)) if len(labels) > 1 else left + plot_w / 2
+            y = top + plot_h - value / 100 * plot_h
+            points.append(f'{x:.1f},{y:.1f}')
+            parts.append(f'<text x="{x:.1f}" y="{height-28}" text-anchor="middle" font-size="10" fill="#475569">{esc(label)}</text>')
+            parts.append(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="4" fill="#7c3aed"><title>{esc(label)}: {value:.1f}%</title></circle>')
+        parts.insert(2, f'<polyline points="{" ".join(points)}" fill="none" stroke="#7c3aed" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>')
+        parts.append('</svg>')
+        return "".join(parts)
+
+    trend_labels = [
+        (s.snapshot_month.strftime("%b %y") if hasattr(s.snapshot_month, "strftime") else str(s.snapshot_month))
+        for s in qe_trend_snapshots
+    ]
+    uat_prod_chart = _svg_grouped_bar_chart(trend_labels, [
+        {"name": "UAT Bugs", "values": [s.uat_bugs or 0 for s in qe_trend_snapshots]},
+        {"name": "Prod Bugs", "values": [s.prod_bugs or 0 for s in qe_trend_snapshots]},
+    ])
+    automation_cases_chart = _svg_grouped_bar_chart(trend_labels, [
+        {"name": "Automatable", "values": [s.automatable_test_cases or 0 for s in qe_trend_snapshots]},
+        {"name": "Automated", "values": [s.automated_test_cases or 0 for s in qe_trend_snapshots]},
+    ])
+    automation_coverage_chart = _svg_line_chart(
+        trend_labels, [(_safe_float(s.automation_coverage) or 0) for s in qe_trend_snapshots]
+    )
     for snapshot in qe_trend_snapshots:
         month_value = snapshot.snapshot_month
         month_label = month_value.strftime("%b %Y") if hasattr(month_value, "strftime") else str(month_value)
@@ -2810,6 +2884,23 @@ def generate_project_report_html(
                 <div class="summary-card">
                     <div class="summary-label">Latest Automation Coverage</div>
                     <div class="summary-value">{(f"{_safe_float(qe_trend_snapshots[-1].automation_coverage):.1f}%" if _safe_float(qe_trend_snapshots[-1].automation_coverage) is not None else "—") if qe_trend_snapshots else "—"}</div>
+                </div>
+            </div>
+            <div class="trend-chart-grid">
+                <div class="trend-chart-card">
+                    <h3>Monthly UAT vs Production Bugs</h3>
+                    <p class="metric-description">Compare UAT and production bug counts across saved monthly snapshots.</p>
+                    {uat_prod_chart}
+                </div>
+                <div class="trend-chart-card">
+                    <h3>Test Automation Coverage</h3>
+                    <p class="metric-description">Monthly automation coverage percentage.</p>
+                    {automation_coverage_chart}
+                </div>
+                <div class="trend-chart-card">
+                    <h3>Automatable vs Automated Test Cases</h3>
+                    <p class="metric-description">Compare automatable test cases with test cases already automated.</p>
+                    {automation_cases_chart}
                 </div>
             </div>
             <div class="table-wrapper">
@@ -3114,6 +3205,37 @@ tr:hover td {{
     font-size: 11px;
 }}
 
+.trend-chart-grid {{
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 18px;
+    margin: 18px 0 24px;
+}}
+.trend-chart-card {{
+    min-width: 0;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 16px;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+}}
+.trend-chart-card h3 {{
+    margin: 0 0 4px;
+    font-size: 15px;
+    color: #0f172a;
+}}
+.trend-chart {{
+    display: block;
+    width: 100%;
+    height: auto;
+    margin-top: 8px;
+}}
+.chart-empty {{
+    color: #64748b;
+    font-size: 13px;
+    padding: 20px 0;
+}}
+
 .formula {{
     background: #f8fafc;
     border: 1px solid #e2e8f0;
@@ -3323,13 +3445,6 @@ tr:hover td {{
 
         <button
             class="tab-button"
-            onclick="openTab(event, 'qe-trends')"
-        >
-            QE Trends
-        </button>
-
-        <button
-            class="tab-button"
             onclick="openTab(event, 'automation')"
         >
             Automation Details
@@ -3340,6 +3455,13 @@ tr:hover td {{
             onclick="openTab(event, 'jira')"
         >
             Jira Details
+        </button>
+
+        <button
+            class="tab-button"
+            onclick="openTab(event, 'qe-trends')"
+        >
+            QE Trends
         </button>
 
         <button
@@ -3456,17 +3578,6 @@ tr:hover td {{
         {"".join(metric_sections)}
 
     </div>
-
-    <!-- ======================================================
-         QE TRENDS
-         ====================================================== -->
-    <div
-        id="qe-trends"
-        class="tab-content"
-    >
-        {qe_trends_section}
-    </div>
-
 
     <!-- ======================================================
          AUTOMATION
@@ -3816,6 +3927,17 @@ tr:hover td {{
 
         </section>
 
+    </div>
+
+
+    <!-- ======================================================
+         QE TRENDS
+         ====================================================== -->
+    <div
+        id="qe-trends"
+        class="tab-content"
+    >
+        {qe_trends_section}
     </div>
 
 
