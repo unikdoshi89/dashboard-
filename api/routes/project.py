@@ -540,6 +540,7 @@ async def download_project_report(
         },
     )
 
+```python
 @router.get(
     "/projects/{project_id}/report/html",
     response_class=HTMLResponse,
@@ -598,141 +599,183 @@ async def project_html_report(
 
     # ==========================================================
     # Jira Bugs
+    # Use the same environment-specific JQLs as the Jira API
     # ==========================================================
 
     if jira_config:
-
         try:
-
-            jira_data = await search_jira_bugs(
-                jira_url=jira_config.jira_url,
-                jira_email=jira_config.jira_email,
-                jira_api_token=jira_config.jira_api_token,
-                jql=jira_config.jql,
-                environment_field=(
-                    jira_config.environment_field
-                    if jira_config.environment_field
-                    else None
-                ),
+            environment_field = (
+                jira_config.environment_field
+                if jira_config.environment_field
+                else None
             )
 
-            jira_issues = (
-                jira_data.get(
-                    "issues",
-                    [],
-                )
-                if jira_data
-                else []
+            sit_jql = (jira_config.sit_jql or "").strip()
+            uat_jql = (jira_config.uat_jql or "").strip()
+            prod_jql = (jira_config.prod_jql or "").strip()
+
+            use_environment_jql = bool(
+                sit_jql or uat_jql or prod_jql
             )
 
-            jira_total = len(
-                jira_issues
-            )
+            if use_environment_jql:
+                # --------------------------------------------------
+                # Environment-specific JQL mode
+                # --------------------------------------------------
 
-            # --------------------------------------------------
-            # Determine environment
-            # --------------------------------------------------
+                environment_queries = [
+                    ("SIT", sit_jql),
+                    ("UAT", uat_jql),
+                    ("PROD", prod_jql),
+                ]
 
-            for issue in jira_issues:
+                all_issues_by_key = {}
+                issues_by_environment = {
+                    "SIT": {},
+                    "UAT": {},
+                    "PROD": {},
+                }
 
-                fields = (
-                    issue.get(
-                        "fields",
-                        {},
+                for environment, environment_jql in environment_queries:
+                    if not environment_jql:
+                        continue
+
+                    jira_data = await search_jira_bugs(
+                        jira_url=jira_config.jira_url,
+                        jira_email=jira_config.jira_email,
+                        jira_api_token=jira_config.jira_api_token,
+                        jql=environment_jql,
+                        environment_field=environment_field,
+                        max_results=100,
                     )
-                    or {}
+
+                    issues = (
+                        jira_data.get("issues", [])
+                        if jira_data
+                        else []
+                    )
+
+                    for issue in issues:
+                        issue_key = issue.get("key")
+
+                        if not issue_key:
+                            continue
+
+                        # Preserve raw Jira objects for HTML rendering.
+                        all_issues_by_key[issue_key] = issue
+
+                        # The environment-specific JQL is authoritative.
+                        issues_by_environment[environment][issue_key] = (
+                            issue
+                        )
+
+                        jira_issue_environments[issue_key] = environment
+
+                # Deduplicated overall issue list.
+                jira_issues = list(all_issues_by_key.values())
+
+                # Deduplicated per-environment lists.
+                jira_sit_issues = list(
+                    issues_by_environment["SIT"].values()
+                )
+                jira_uat_issues = list(
+                    issues_by_environment["UAT"].values()
+                )
+                jira_prod_issues = list(
+                    issues_by_environment["PROD"].values()
                 )
 
-                environment = get_issue_environment(
-                    fields=fields,
-                    environment_field=(
-                        jira_config.environment_field
-                        if jira_config.environment_field
-                        else None
-                    ),
-                    uat_label=jira_config.uat_label,
-                    prod_label=jira_config.prod_label,
+                jira_total = len(jira_issues)
+                jira_sit = len(jira_sit_issues)
+                jira_uat = len(jira_uat_issues)
+                jira_prod = len(jira_prod_issues)
+
+            else:
+                # --------------------------------------------------
+                # Backward-compatible single-JQL fallback
+                # --------------------------------------------------
+
+                jira_data = await search_jira_bugs(
+                    jira_url=jira_config.jira_url,
+                    jira_email=jira_config.jira_email,
+                    jira_api_token=jira_config.jira_api_token,
+                    jql=jira_config.jql,
+                    environment_field=environment_field,
+                    max_results=100,
                 )
 
-                issue_key = issue.get("key")
+                raw_issues = (
+                    jira_data.get("issues", [])
+                    if jira_data
+                    else []
+                )
 
-                jira_issue_environments[issue_key] = environment or "SIT"
+                # Deduplicate by Jira issue key.
+                unique_issues = {}
 
-                if environment == "UAT":
+                for issue in raw_issues:
+                    issue_key = issue.get("key")
 
-                    jira_uat += 1
-                    jira_uat_issues.append(issue)
+                    if issue_key:
+                        unique_issues[issue_key] = issue
 
-                elif environment == "PROD":
+                jira_issues = list(unique_issues.values())
 
-                    jira_prod += 1
-                    jira_prod_issues.append(issue)
+                for issue in jira_issues:
+                    fields = issue.get("fields", {}) or {}
 
-                else:
+                    environment = get_issue_environment(
+                        fields=fields,
+                        environment_field=environment_field,
+                        uat_label=jira_config.uat_label,
+                        prod_label=jira_config.prod_label,
+                    )
 
-                    jira_sit_issues.append(issue)
+                    environment = environment or "SIT"
+                    issue_key = issue.get("key")
 
-            # --------------------------------------------------
-            # Remaining bugs
-            #
-            # Anything that is neither UAT nor PROD
-            # is displayed as SIT.
-            # --------------------------------------------------
+                    jira_issue_environments[issue_key] = environment
 
-            jira_sit = max(
-                jira_total
-                - jira_uat
-                - jira_prod,
-                0,
-            )
+                    if environment == "UAT":
+                        jira_uat_issues.append(issue)
+                    elif environment == "PROD":
+                        jira_prod_issues.append(issue)
+                    else:
+                        jira_sit_issues.append(issue)
+
+                jira_total = len(jira_issues)
+                jira_sit = len(jira_sit_issues)
+                jira_uat = len(jira_uat_issues)
+                jira_prod = len(jira_prod_issues)
 
             print(
                 "HTML REPORT JIRA SUMMARY:",
                 {
                     "project_id": project_id,
+                    "mode": (
+                        "environment-specific JQL"
+                        if use_environment_jql
+                        else "single JQL"
+                    ),
                     "total": jira_total,
+                    "sit": jira_sit,
                     "uat": jira_uat,
                     "prod": jira_prod,
-                    "sit": jira_sit,
-                    "environment_field": (
-                        jira_config.environment_field
-                        if jira_config.environment_field
-                        else None
-                    ),
+                    "sit_rows": len(jira_sit_issues),
+                    "uat_rows": len(jira_uat_issues),
+                    "prod_rows": len(jira_prod_issues),
                 },
             )
 
         except Exception as exc:
-
             import traceback
 
-            print(
-                "========================================"
-            )
-
-            print(
-                "HTML REPORT JIRA BUG FETCH FAILED"
-            )
-
-            print(
-                "========================================"
-            )
-
-            print(
-                str(exc)
-            )
-
+            print("HTML REPORT JIRA BUG FETCH FAILED")
+            print(str(exc))
             traceback.print_exc()
 
-            print(
-                "========================================"
-            )
-
-            # Do not fail the complete report.
-            #
-            # Keep the report generation alive, but make
-            # the Jira failure visible in backend logs.
-
+            # Preserve existing behavior: Jira failures should not
+            # prevent the rest of the report from being generated.
             jira_total = 0
             jira_uat = 0
             jira_prod = 0
@@ -744,68 +787,49 @@ async def project_html_report(
             jira_issue_environments = {}
 
     # ==========================================================
-    # Jira Features / Stories
+    # Jira Features / Stories -- unchanged
     # ==========================================================
 
     if jira_config:
-
         feature_jql = (
-            jira_config.feature_jql
-            or ""
+            jira_config.feature_jql or ""
         ).strip()
 
         if feature_jql:
-
             try:
-
-                feature_data = (
-                    await search_jira_features(
-                        jira_url=(
-                            jira_config.jira_url
-                        ),
-                        jira_email=(
-                            jira_config.jira_email
-                        ),
-                        jira_api_token=(
-                            jira_config.jira_api_token
-                        ),
-                        jql=feature_jql,
-                        environment_field=(
-                            jira_config.environment_field
-                            if jira_config.environment_field
-                            else None
-                        ),
-                    )
+                feature_data = await search_jira_features(
+                    jira_url=jira_config.jira_url,
+                    jira_email=jira_config.jira_email,
+                    jira_api_token=jira_config.jira_api_token,
+                    jql=feature_jql,
+                    environment_field=(
+                        jira_config.environment_field
+                        if jira_config.environment_field
+                        else None
+                    ),
                 )
 
                 jira_features = (
-                    feature_data.get(
-                        "issues",
-                        [],
-                    )
+                    feature_data.get("issues", [])
                     if feature_data
                     else []
                 )
 
             except Exception as exc:
-
                 import traceback
 
                 print(
                     "HTML report Jira feature fetch failed:",
                     exc,
                 )
-
                 traceback.print_exc()
-
                 jira_features = []
 
     # ==========================================================
-    # Generate HTML
+    # Generate HTML -- unchanged
     # ==========================================================
 
     try:
-
         html = generate_project_report_html(
             db=db,
             project_id=project_id,
@@ -826,30 +850,11 @@ async def project_html_report(
         )
 
     except Exception as exc:
-
         import traceback
 
-        print(
-            "========================================"
-        )
-
-        print(
-            "HTML REPORT GENERATION FAILED"
-        )
-
-        print(
-            "========================================"
-        )
-
-        print(
-            str(exc)
-        )
-
+        print("HTML REPORT GENERATION FAILED")
+        print(str(exc))
         traceback.print_exc()
-
-        print(
-            "========================================"
-        )
 
         raise HTTPException(
             status_code=500,
