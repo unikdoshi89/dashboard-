@@ -206,7 +206,40 @@ def normalize_jira_issue(
         "labels": labels,
     }
 
+def count_priorities_by_environment(
+    sit_bugs: list,
+    uat_bugs: list,
+    prod_bugs: list,
+) -> dict:
+    """
+    Count Jira bugs by their actual priority name,
+    grouped by environment.
+    """
 
+    result = {}
+
+    environment_bugs = {
+        "SIT": sit_bugs,
+        "UAT": uat_bugs,
+        "PROD": prod_bugs,
+    }
+
+    for environment, bugs in environment_bugs.items():
+        counts = {}
+
+        for bug in bugs:
+            priority = (
+                str(bug.get("priority") or "").strip()
+                or "Unspecified"
+            )
+
+            counts[priority] = counts.get(priority, 0) + 1
+
+        result[environment] = dict(
+            sorted(counts.items(), key=lambda item: item[0].lower())
+        )
+
+    return result
 # ============================================================
 # Reusable Jira Bug Metrics
 # ============================================================
