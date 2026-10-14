@@ -332,6 +332,11 @@ async def collect_jira_bug_metrics(
                     prod_jql,
                 )
             )
+        count_priorities_by_environment(
+                    sit_bugs,
+                    uat_bugs,
+                    prod_bugs,
+                ),   
 
         all_bugs_by_key = {}
 
