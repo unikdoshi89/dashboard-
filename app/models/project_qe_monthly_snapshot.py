@@ -7,6 +7,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     UniqueConstraint,
+    JSON,
 )
 
 from sqlalchemy.orm import Mapped, mapped_column
@@ -36,6 +37,12 @@ class ProjectQEMonthlySnapshot(Base):
         ForeignKey("projects.id"),
         nullable=False,
         index=True,
+    )
+
+     priority_counts_by_environment: Mapped[dict] = mapped_column(
+        JSON,
+        default=dict,
+        nullable=False,
     )
 
     # First day of the month.
