@@ -283,6 +283,13 @@ function JiraDetails() {
         setUatBugPages(0);
         setProdBugPages(0);
         setConfigured(false);
+        setPriorityCountsByEnvironment(
+  data.priority_counts_by_environment || {
+    SIT: {},
+    UAT: {},
+    PROD: {},
+  }
+);
         return;
       }
 
@@ -311,6 +318,11 @@ function JiraDetails() {
       setAllBugPages(0);
       setUatBugPages(0);
       setProdBugPages(0);
+      setPriorityCountsByEnvironment({
+  SIT: {},
+  UAT: {},
+  PROD: {},
+});
     } finally {
       setLoadingBugs(false);
     }
