@@ -2515,6 +2515,91 @@ def generate_project_report_html(
     jira_uat_rows = build_jira_issue_rows(jira_uat_issues, "UAT")
     jira_prod_rows = build_jira_issue_rows(jira_prod_issues, "PROD")
 
+    # ==========================================================
+    # BUG PRIORITY BREAKDOWN BY ENVIRONMENT
+    # ==========================================================
+
+    priority_counts_by_environment = {
+        "SIT": {},
+        "UAT": {},
+        "PROD": {},
+    }
+    priority_environment_totals = {"SIT": 0, "UAT": 0, "PROD": 0}
+    observed_bug_priorities = set()
+
+    for issue in jira_issues:
+        fields = issue.get("fields", {}) or {}
+        issue_key = issue.get("key")
+        environment = (
+            jira_issue_environments.get(issue_key)
+            or "SIT"
+        )
+        if environment not in priority_counts_by_environment:
+            environment = "SIT"
+
+        priority = (fields.get("priority") or {}).get("name") or "Unprioritized"
+        observed_bug_priorities.add(priority)
+        priority_environment_totals[environment] += 1
+        priority_counts_by_environment[environment][priority] = (
+            priority_counts_by_environment[environment].get(priority, 0) + 1
+        )
+
+    standard_priority_order = [
+        "Highest", "Blocker", "Critical", "High", "Major",
+        "Medium", "Normal", "Low", "Minor", "Lowest", "Trivial",
+        "Unprioritized",
+    ]
+    report_priority_names = sorted(
+        observed_bug_priorities,
+        key=lambda name: (
+            standard_priority_order.index(name)
+            if name in standard_priority_order
+            else len(standard_priority_order),
+            name.lower(),
+        ),
+    )
+    report_priority_headers = "".join(
+        f"<th>{esc(priority)}</th>" for priority in report_priority_names
+    )
+    report_priority_rows = []
+    for environment in ("SIT", "UAT", "PROD"):
+        priority_cells = "".join(
+            f"<td>{priority_counts_by_environment[environment].get(priority, 0)}</td>"
+            for priority in report_priority_names
+        )
+        report_priority_rows.append(
+            f"<tr><td><strong>{environment}</strong></td>{priority_cells}"
+            f"<td><strong>{priority_environment_totals[environment]}</strong></td></tr>"
+        )
+
+    report_priority_totals = {
+        priority: sum(
+            priority_counts_by_environment[environment].get(priority, 0)
+            for environment in ("SIT", "UAT", "PROD")
+        )
+        for priority in report_priority_names
+    }
+    report_priority_rows.append(
+        "<tr><td><strong>Total</strong></td>"
+        + "".join(
+            f"<td><strong>{report_priority_totals[priority]}</strong></td>"
+            for priority in report_priority_names
+        )
+        + f"<td><strong>{sum(priority_environment_totals.values())}</strong></td></tr>"
+    )
+    jira_priority_summary_html = f"""
+        <section class=\"section-card\">
+            <div class=\"section-heading\"><h2>Bug Priority Breakdown</h2></div>
+            <p class=\"section-description\">Bug counts grouped by Jira priority and environment.</p>
+            <div class=\"table-wrapper\">
+                <table>
+                    <thead><tr><th>Environment</th>{report_priority_headers}<th>Total</th></tr></thead>
+                    <tbody>{''.join(report_priority_rows)}</tbody>
+                </table>
+            </div>
+        </section>
+    """
+
     def jira_bug_table(rows):
         if not rows:
             rows = (
@@ -3837,6 +3922,8 @@ tr:hover td {{
 
         </section>
 
+
+        {jira_priority_summary_html}
 
         <section class="section-card">
 
