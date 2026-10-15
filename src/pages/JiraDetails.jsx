@@ -83,11 +83,11 @@ function JiraDetails() {
   const [uatBugPages, setUatBugPages] = useState(0);
   const [prodBugPages, setProdBugPages] = useState(0);
   const [priorityCountsByEnvironment, setPriorityCountsByEnvironment] =
-  useState({
-    SIT: {},
-    UAT: {},
-    PROD: {},
-  });
+    useState({
+      SIT: {},
+      UAT: {},
+      PROD: {},
+    });
 
   // ============================================================
   // Jira Features / Stories
@@ -130,6 +130,11 @@ function JiraDetails() {
         setBugs([]);
         setUatBugs([]);
         setProdBugs([]);
+        setPriorityCountsByEnvironment({
+          SIT: {},
+          UAT: {},
+          PROD: {},
+        });
         setFeatures([]);
         setFeatureTotal(0);
         setFeaturePages(0);
@@ -283,13 +288,11 @@ function JiraDetails() {
         setUatBugPages(0);
         setProdBugPages(0);
         setConfigured(false);
-        setPriorityCountsByEnvironment(
-  data.priority_counts_by_environment || {
-    SIT: {},
-    UAT: {},
-    PROD: {},
-  }
-);
+        setPriorityCountsByEnvironment({
+          SIT: {},
+          UAT: {},
+          PROD: {},
+        });
         return;
       }
 
@@ -297,6 +300,13 @@ function JiraDetails() {
       setBugs(Array.isArray(data.bugs) ? data.bugs : []);
       setUatBugs(Array.isArray(data.uat_bugs) ? data.uat_bugs : []);
       setProdBugs(Array.isArray(data.prod_bugs) ? data.prod_bugs : []);
+      setPriorityCountsByEnvironment(
+        data.priority_counts_by_environment || {
+          SIT: {},
+          UAT: {},
+          PROD: {},
+        }
+      );
 
       setAllBugTotal(Number(data.all_total ?? data.total ?? 0));
       setUatBugTotal(Number(data.uat_total ?? 0));
@@ -468,6 +478,11 @@ function JiraDetails() {
         setBugs([]);
         setUatBugs([]);
         setProdBugs([]);
+        setPriorityCountsByEnvironment({
+          SIT: {},
+          UAT: {},
+          PROD: {},
+        });
         setFeatures([]);
         setFeatureTotal(0);
         setFeaturePages(0);
@@ -604,6 +619,11 @@ function JiraDetails() {
         setBugs([]);
         setUatBugs([]);
         setProdBugs([]);
+        setPriorityCountsByEnvironment({
+          SIT: {},
+          UAT: {},
+          PROD: {},
+        });
         setFeatures([]);
         setFeatureTotal(0);
         setFeaturePages(0);
@@ -1498,6 +1518,84 @@ function JiraDetails() {
 
             {!loadingBugs && !bugsError && (
               <>
+
+                {/* Priority-wise bug summary */}
+                <div className="px-6 pt-5 pb-2">
+                  <div className="mb-4">
+                    <h3 className="text-sm font-semibold text-gray-900">
+                      Bug Priority Summary
+                    </h3>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Counts are grouped by environment and Jira priority.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {["SIT", "UAT", "PROD"].map((environment) => {
+                      const counts =
+                        priorityCountsByEnvironment?.[environment] || {};
+                      const total = Object.values(counts).reduce(
+                        (sum, count) => sum + Number(count || 0),
+                        0
+                      );
+                      const entries = Object.entries(counts).sort((a, b) => {
+                        const priorityOrder = {
+                          highest: 0,
+                          critical: 1,
+                          blocker: 2,
+                          high: 3,
+                          medium: 4,
+                          low: 5,
+                          lowest: 6,
+                          unspecified: 7,
+                        };
+                        const aPriority = priorityOrder[a[0].toLowerCase()] ?? 99;
+                        const bPriority = priorityOrder[b[0].toLowerCase()] ?? 99;
+                        return aPriority - bPriority || a[0].localeCompare(b[0]);
+                      });
+
+                      return (
+                        <div
+                          key={environment}
+                          className="rounded-lg border border-gray-200 bg-white p-4"
+                        >
+                          <div className="flex items-center justify-between gap-3 mb-3">
+                            <h4 className="text-sm font-semibold text-gray-800">
+                              {environment === "PROD" ? "Production" : environment}
+                            </h4>
+                            <span className="rounded-full bg-gray-100 px-2.5 py-1 text-sm font-bold text-gray-800">
+                              {total.toLocaleString()}
+                            </span>
+                          </div>
+
+                          {entries.length === 0 ? (
+                            <p className="text-sm text-gray-500">
+                              No priority data available.
+                            </p>
+                          ) : (
+                            <div className="space-y-2">
+                              {entries.map(([priority, count]) => (
+                                <div
+                                  key={priority}
+                                  className="flex items-center justify-between gap-3"
+                                >
+                                  <span
+                                    className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${getPriorityClass(priority)}`}
+                                  >
+                                    {priority}
+                                  </span>
+                                  <span className="text-sm font-semibold text-gray-800">
+                                    {Number(count || 0).toLocaleString()}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
 
                 {/* Table title */}
 
