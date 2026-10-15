@@ -437,6 +437,15 @@ async def create_or_update_qe_snapshot(
     snapshot.total_features = (
         total_features
     )
+    
+    snapshot.priority_counts_by_environment = (
+        jira_metrics.get("priority_counts_by_environment")
+        or {
+            "SIT": {},
+            "UAT": {},
+            "PROD": {},
+        }
+    )
 
     # ========================================================
     # Update Automation Metrics
