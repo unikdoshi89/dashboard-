@@ -227,6 +227,41 @@ function QETrends() {
       })
     );
 
+  // ============================================================
+  // Priority-wise bug trend data
+  // ============================================================
+
+  const priorityNames = [
+    ...new Set(
+      trends.flatMap((item) =>
+        Object.values(item.priority_counts_by_environment || {})
+          .flatMap((counts) => Object.keys(counts || {}))
+      )
+    ),
+  ].sort((a, b) => a.localeCompare(b));
+
+  const priorityChartData = trends.map((item) => {
+    const environmentCounts =
+      item.priority_counts_by_environment || {};
+
+    const row = {
+      month: formatMonth(item.snapshot_month),
+    };
+
+    priorityNames.forEach((priority) => {
+      row[priority] = ["SIT", "UAT", "PROD"].reduce(
+        (sum, environment) =>
+          sum +
+          Number(
+            environmentCounts[environment]?.[priority] || 0
+          ),
+        0
+      );
+    });
+
+    return row;
+  });
+
 
   // ============================================================
   // Loading
@@ -785,6 +820,149 @@ function QETrends() {
 
               </div>
 
+            </section>
+
+
+            {/* ==================================================
+                PRIORITY-WISE BUG TREND
+                ================================================== */}
+
+            <section className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm mb-8">
+              <div className="mb-6">
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Priority-wise Bug Trend
+                </h3>
+                <p className="text-sm text-gray-500 mt-1">
+                  Monthly bug counts by Jira priority across SIT, UAT, and PROD.
+                </p>
+              </div>
+
+              {priorityNames.length === 0 ? (
+                <p className="text-sm text-gray-500 py-8 text-center">
+                  No priority snapshot data is available yet. Capture a snapshot
+                  after deploying the priority-count changes.
+                </p>
+              ) : (
+                <div className="h-80">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={priorityChartData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="month" />
+                      <YAxis />
+                      <Tooltip />
+                      <Legend />
+                      {priorityNames.map((priority, index) => {
+                        const palette = [
+                          "#dc2626",
+                          "#ea580c",
+                          "#ca8a04",
+                          "#2563eb",
+                          "#16a34a",
+                          "#7c3aed",
+                          "#0891b2",
+                          "#64748b",
+                        ];
+
+                        return (
+                          <Line
+                            key={priority}
+                            type="monotone"
+                            dataKey={priority}
+                            name={priority}
+                            stroke={palette[index % palette.length]}
+                            strokeWidth={2}
+                            connectNulls
+                          />
+                        );
+                      })}
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </section>
+
+            {/* ==================================================
+                LATEST BUG PRIORITY BREAKDOWN
+                ================================================== */}
+
+            <section className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm mb-8">
+              <div className="mb-6">
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Latest Bug Priority Breakdown
+                </h3>
+                <p className="text-sm text-gray-500 mt-1">
+                  Priority counts from the latest saved monthly snapshot.
+                </p>
+              </div>
+
+              {!latest ? (
+                <p className="text-sm text-gray-500">
+                  No snapshot available.
+                </p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50 border-b border-gray-200">
+                      <tr>
+                        <th className="px-4 py-3 text-left font-semibold text-gray-600">
+                          Environment
+                        </th>
+                        {priorityNames.map((priority) => (
+                          <th
+                            key={priority}
+                            className="px-4 py-3 text-right font-semibold text-gray-600"
+                          >
+                            {priority}
+                          </th>
+                        ))}
+                        <th className="px-4 py-3 text-right font-semibold text-gray-600">
+                          Total
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {["SIT", "UAT", "PROD"].map((environment) => {
+                        const counts =
+                          latest.priority_counts_by_environment?.[environment] || {};
+
+                        const total = Object.values(counts).reduce(
+                          (sum, count) => sum + Number(count || 0),
+                          0
+                        );
+
+                        return (
+                          <tr
+                            key={environment}
+                            className="border-b border-gray-100"
+                          >
+                            <td className="px-4 py-3 font-semibold text-gray-800">
+                              {environment}
+                            </td>
+                            {priorityNames.map((priority) => (
+                              <td
+                                key={priority}
+                                className="px-4 py-3 text-right"
+                              >
+                                {formatNumber(counts[priority] || 0)}
+                              </td>
+                            ))}
+                            <td className="px-4 py-3 text-right font-semibold">
+                              {formatNumber(total)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+
+                  {priorityNames.length === 0 && (
+                    <p className="text-sm text-gray-500 mt-3">
+                      No priority counts are stored in the available snapshots yet.
+                      Capture a new snapshot after the backend changes are deployed.
+                    </p>
+                  )}
+                </div>
+              )}
             </section>
 
 
