@@ -107,6 +107,8 @@ async def create_qe_snapshot(
 
             "prod_bugs":
                 snapshot.prod_bugs,
+            "priority_counts_by_environment":
+                snapshot.priority_counts_by_environment or {},
 
             "total_features":
                 snapshot.total_features,
@@ -207,6 +209,9 @@ def get_qe_trends(
 
                 "prod_bugs":
                     snapshot.prod_bugs,
+
+                "priority_counts_by_environment":
+                    snapshot.priority_counts_by_environment or {},
 
                 "total_features":
                     snapshot.total_features,
