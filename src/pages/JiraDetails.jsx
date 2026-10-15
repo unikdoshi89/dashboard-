@@ -82,6 +82,12 @@ function JiraDetails() {
   const [allBugPages, setAllBugPages] = useState(0);
   const [uatBugPages, setUatBugPages] = useState(0);
   const [prodBugPages, setProdBugPages] = useState(0);
+  const [priorityCountsByEnvironment, setPriorityCountsByEnvironment] =
+  useState({
+    SIT: {},
+    UAT: {},
+    PROD: {},
+  });
 
   // ============================================================
   // Jira Features / Stories
