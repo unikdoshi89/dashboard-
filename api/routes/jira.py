@@ -1123,38 +1123,19 @@ async def test_project_jira_connection(
 )
 async def get_jira_bugs(
     project_id: int,
-    search: str | None = Query(
-        default=None
-    ),
-    all_page: int = Query(
-    default=1,
-    ge=1,
-),
-uat_page: int = Query(
-    default=1,
-    ge=1,
-),
-prod_page: int = Query(
-    default=1,
-    ge=1,
-),
-per_page: int = Query(
-    default=50,
-    ge=5,
-    le=200,
-),
+    search: str | None = Query(default=None),
+    all_page: int = Query(default=1, ge=1),
+    uat_page: int = Query(default=1, ge=1),
+    prod_page: int = Query(default=1, ge=1),
+    per_page: int = Query(default=50, ge=5, le=200),
     db: Session = Depends(get_db),
 ):
-
     # ========================================================
     # Project
     # ========================================================
-
     project = (
         db.query(Project)
-        .filter(
-            Project.id == project_id
-        )
+        .filter(Project.id == project_id)
         .first()
     )
 
@@ -1167,20 +1148,16 @@ per_page: int = Query(
     # ========================================================
     # Configuration
     # ========================================================
-
     config = (
         db.query(JiraConfiguration)
         .filter(
-            JiraConfiguration.project_id
-            == project_id,
-
+            JiraConfiguration.project_id == project_id,
             JiraConfiguration.active.is_(True),
         )
         .first()
     )
 
     if not config:
-
         return {
             "configured": False,
             "project_id": project_id,
@@ -1204,31 +1181,38 @@ per_page: int = Query(
             "prod_pages": 0,
             "prod_bugs": [],
             "bugs": [],
+            "priority_counts_by_environment": {
+                "SIT": {},
+                "UAT": {},
+                "PROD": {},
+            },
         }
 
     # ========================================================
     # Validate Jira credentials
     # ========================================================
-
-    if not config.jira_url.strip():
+    if not config.jira_url or not config.jira_url.strip():
         raise HTTPException(
             status_code=500,
             detail="Jira URL is not configured.",
         )
 
-    if not config.jira_email.strip():
+    if not config.jira_email or not config.jira_email.strip():
         raise HTTPException(
             status_code=500,
             detail="Jira email is not configured.",
         )
 
-    if not config.jira_api_token.strip():
+    if (
+        not config.jira_api_token
+        or not config.jira_api_token.strip()
+    ):
         raise HTTPException(
             status_code=500,
             detail="Jira API token is not configured.",
         )
 
-    if not config.jql.strip():
+    if not config.jql or not config.jql.strip():
         raise HTTPException(
             status_code=500,
             detail="Jira JQL is not configured.",
@@ -1237,14 +1221,8 @@ per_page: int = Query(
     # ========================================================
     # Environment configuration
     # ========================================================
-
     environment_field = (
-        getattr(
-            config,
-            "environment_field",
-            None,
-        )
-        or ""
+        getattr(config, "environment_field", None) or ""
     ).strip()
 
     uat_label = (
@@ -1260,75 +1238,36 @@ per_page: int = Query(
     )
 
     # ========================================================
-    # JQLs
+    # Environment-specific JQLs
     #
-    # New configuration:
-    #
-    # SIT -> sit_jql
-    # UAT -> uat_jql
+    # SIT  -> sit_jql
+    # UAT  -> uat_jql
     # PROD -> prod_jql
     #
-    # Existing jql remains the fallback.
+    # Existing config.jql remains the fallback.
     # ========================================================
-
-    sit_jql = (
-        config.sit_jql or ""
-    ).strip()
-
-    uat_jql = (
-        config.uat_jql or ""
-    ).strip()
-
-    prod_jql = (
-        config.prod_jql or ""
-    ).strip()
-
-    # --------------------------------------------------------
-    # Backward compatibility
-    #
-    # If environment-specific JQLs are not configured,
-    # use the existing JQL and classification logic.
-    # --------------------------------------------------------
+    sit_jql = (config.sit_jql or "").strip()
+    uat_jql = (config.uat_jql or "").strip()
+    prod_jql = (config.prod_jql or "").strip()
 
     use_environment_jql = bool(
-        sit_jql
-        or uat_jql
-        or prod_jql
+        sit_jql or uat_jql or prod_jql
     )
 
     # ========================================================
-    # SEARCH MODE 1
-    #
-    # Environment-specific JQL
+    # SEARCH MODE 1: Environment-specific JQL
     # ========================================================
-
     if use_environment_jql:
-
         environment_queries = []
 
         if sit_jql:
-            environment_queries.append(
-                (
-                    "SIT",
-                    sit_jql,
-                )
-            )
+            environment_queries.append(("SIT", sit_jql))
 
         if uat_jql:
-            environment_queries.append(
-                (
-                    "UAT",
-                    uat_jql,
-                )
-            )
+            environment_queries.append(("UAT", uat_jql))
 
         if prod_jql:
-            environment_queries.append(
-                (
-                    "PROD",
-                    prod_jql,
-                )
-            )
+            environment_queries.append(("PROD", prod_jql))
 
         all_bugs_by_key = {}
 
@@ -1336,98 +1275,67 @@ per_page: int = Query(
         uat_bugs = []
         prod_bugs = []
 
-        for (
-            forced_environment,
-            environment_jql,
-        ) in environment_queries:
-
+        for forced_environment, environment_jql in environment_queries:
             final_jql = build_search_jql(
                 environment_jql,
                 search,
             )
 
             try:
-
-                jira_data = (
-                    await search_jira_bugs(
-                        jira_url=config.jira_url,
-                        jira_email=config.jira_email,
-                        jira_api_token=config.jira_api_token,
-                        jql=final_jql,
-                        environment_field=(
-                            environment_field
-                            or None
-                        ),
-                    )
+                jira_data = await search_jira_bugs(
+                    jira_url=config.jira_url,
+                    jira_email=config.jira_email,
+                    jira_api_token=config.jira_api_token,
+                    jql=final_jql,
+                    environment_field=environment_field or None,
                 )
-
             except Exception as exc:
-
                 raise HTTPException(
                     status_code=502,
                     detail=(
                         "Unable to fetch Jira "
-                        f"{forced_environment} bugs: "
-                        f"{str(exc)}"
+                        f"{forced_environment} bugs: {str(exc)}"
                     ),
                 )
 
-            for issue in jira_data.get(
-                "issues",
-                [],
-            ):
-
+            for issue in jira_data.get("issues", []):
                 bug = normalize_jira_issue(
                     issue=issue,
-                    environment_field=(
-                        environment_field
-                    ),
+                    environment_field=environment_field,
                     uat_label=uat_label,
                     prod_label=prod_label,
-                    forced_environment=(
-                        forced_environment
-                    ),
+                    forced_environment=forced_environment,
                 )
 
-                jira_key = bug.get(
-                    "jira_id"
-                )
+                jira_key = bug.get("jira_id")
 
                 if not jira_key:
                     continue
 
-                all_bugs_by_key[
-                    jira_key
-                ] = bug
+                # Preserve the existing behavior for the combined list:
+                # deduplicate by Jira issue key.
+                all_bugs_by_key[jira_key] = bug
 
-                if (
-                    forced_environment
-                    == "SIT"
-                ):
-                    sit_bugs.append(
-                        bug
-                    )
+                # Keep environment-specific lists separate.
+                if forced_environment == "SIT":
+                    sit_bugs.append(bug)
+                elif forced_environment == "UAT":
+                    uat_bugs.append(bug)
+                elif forced_environment == "PROD":
+                    prod_bugs.append(bug)
 
-                elif (
-                    forced_environment
-                    == "UAT"
-                ):
-                    uat_bugs.append(
-                        bug
-                    )
+        bugs = list(all_bugs_by_key.values())
 
-                elif (
-                    forced_environment
-                    == "PROD"
-                ):
-                    prod_bugs.append(
-                        bug
-                    )
-
-        bugs = list(
-            all_bugs_by_key.values()
+        # Calculate priority counts BEFORE pagination.
+        priority_counts_by_environment = (
+            count_priorities_by_environment(
+                sit_bugs,
+                uat_bugs,
+                prod_bugs,
+            )
         )
 
+        # Paginate the combined and environment-specific lists.
         all_result = paginate_jira_items(
             bugs,
             all_page,
@@ -1454,167 +1362,107 @@ per_page: int = Query(
 
         return {
             "configured": True,
+            "project_id": project_id,
+            "project_name": project.name,
 
-            "project_id":
-                project_id,
+            "jql": config.jql,
+            "sit_jql": sit_jql,
+            "uat_jql": uat_jql,
+            "prod_jql": prod_jql,
+            "environment_field": environment_field or None,
 
-            "project_name":
-                project.name,
+            "page": all_result["page"],
+            "all_page": all_result["page"],
+            "per_page": per_page,
 
-            "jql":
-                config.jql,
+            "total": all_result["total"],
+            "all_total": all_result["total"],
 
-            "sit_jql":
-                sit_jql,
+            "sit_total": sit_result["total"],
+            "sit_pages": sit_result["pages"],
 
-            "uat_jql":
-                uat_jql,
+            "uat_page": uat_result["page"],
+            "uat_total": uat_result["total"],
+            "uat_pages": uat_result["pages"],
 
-            "prod_jql":
-                prod_jql,
+            "prod_page": prod_result["page"],
+            "prod_total": prod_result["total"],
+            "prod_pages": prod_result["pages"],
 
-            "environment_field":
-                environment_field or None,
+            "pages": all_result["pages"],
+            "all_pages": all_result["pages"],
 
-            "page":
-                all_result["page"],
+            "bugs": all_result["items"],
+            "sit_bugs": sit_result["items"],
+            "uat_bugs": uat_result["items"],
+            "prod_bugs": prod_result["items"],
 
-            "all_page":
-                all_result["page"],
-
-            "per_page":
-                per_page,
-
-            "total":
-                all_result["total"],
-
-            "all_total":
-                all_result["total"],
-
-            "sit_total":
-                sit_result["total"],
-
-            "sit_pages":
-                sit_result["pages"],
-
-            "uat_page":
-                uat_result["page"],
-
-            "uat_total":
-                uat_result["total"],
-
-            "uat_pages":
-                uat_result["pages"],
-
-            "prod_page":
-                prod_result["page"],
-
-            "prod_total":
-                prod_result["total"],
-
-            "prod_pages":
-                prod_result["pages"],
-
-            "pages":
-                all_result["pages"],
-
-            "all_pages":
-                all_result["pages"],
-
-            "bugs":
-                all_result["items"],
-
-            "sit_bugs":
-                sit_result["items"],
-
-            "uat_bugs":
-                uat_result["items"],
-
-            "prod_bugs":
-                prod_result["items"],
+            # NEW: Full priority counts for each environment.
+            "priority_counts_by_environment": (
+                priority_counts_by_environment
+            ),
         }
 
     # ========================================================
-    # SEARCH MODE 2
-    #
-    # Existing backward-compatible behavior
+    # SEARCH MODE 2: Backward-compatible single JQL
     # ========================================================
-
     jql = build_search_jql(
         config.jql,
         search,
     )
 
     try:
-
-        jira_data = (
-            await search_jira_bugs(
-                jira_url=config.jira_url,
-                jira_email=config.jira_email,
-                jira_api_token=config.jira_api_token,
-                jql=jql,
-                environment_field=(
-                    environment_field
-                    or None
-                ),
-            )
+        jira_data = await search_jira_bugs(
+            jira_url=config.jira_url,
+            jira_email=config.jira_email,
+            jira_api_token=config.jira_api_token,
+            jql=jql,
+            environment_field=environment_field or None,
         )
-
     except Exception as exc:
-
         raise HTTPException(
             status_code=502,
-            detail=(
-                f"Unable to fetch Jira bugs: {str(exc)}"
-            ),
+            detail=f"Unable to fetch Jira bugs: {str(exc)}",
         )
 
     bugs = []
+    sit_bugs = []
     uat_bugs = []
     prod_bugs = []
-    sit_bugs = []
 
-    for issue in jira_data.get(
-        "issues",
-        [],
-    ):
-
+    for issue in jira_data.get("issues", []):
         bug = normalize_jira_issue(
             issue=issue,
-            environment_field=(
-                environment_field
-            ),
+            environment_field=environment_field,
             uat_label=uat_label,
             prod_label=prod_label,
         )
 
-        environment = (
-            bug.get("environment")
-        )
+        environment = bug.get("environment")
 
         if not environment:
             environment = "SIT"
             bug["environment"] = "SIT"
 
-        bugs.append(
-            bug
-        )
+        bugs.append(bug)
 
         if environment == "UAT":
-            uat_bugs.append(
-                bug
-            )
-
+            uat_bugs.append(bug)
         elif environment == "PROD":
-            prod_bugs.append(
-                bug
-            )
-
+            prod_bugs.append(bug)
         else:
-            sit_bugs.append(
-                bug
-            )
+            sit_bugs.append(bug)
 
+    # Calculate priority counts BEFORE pagination.
+    priority_counts_by_environment = (
+        count_priorities_by_environment(
+            sit_bugs,
+            uat_bugs,
+            prod_bugs,
+        )
+    )
+
+    # Paginate the combined and environment-specific lists.
     all_result = paginate_jira_items(
         bugs,
         all_page,
@@ -1641,90 +1489,650 @@ per_page: int = Query(
 
     return {
         "configured": True,
+        "project_id": project_id,
+        "project_name": project.name,
 
-        "project_id":
-            project_id,
+        "jql": jql,
+        "sit_jql": sit_jql,
+        "uat_jql": uat_jql,
+        "prod_jql": prod_jql,
+        "environment_field": environment_field or None,
 
-        "project_name":
-            project.name,
+        "page": all_result["page"],
+        "all_page": all_result["page"],
+        "per_page": per_page,
 
-        "jql":
-            jql,
+        "total": all_result["total"],
+        "all_total": all_result["total"],
 
-        "sit_jql":
-            sit_jql,
+        "sit_total": sit_result["total"],
+        "sit_pages": sit_result["pages"],
 
-        "uat_jql":
-            uat_jql,
+        "uat_page": uat_result["page"],
+        "uat_total": uat_result["total"],
+        "uat_pages": uat_result["pages"],
 
-        "prod_jql":
-            prod_jql,
+        "prod_page": prod_result["page"],
+        "prod_total": prod_result["total"],
+        "prod_pages": prod_result["pages"],
 
-        "environment_field":
-            environment_field or None,
+        "pages": all_result["pages"],
+        "all_pages": all_result["pages"],
 
-        "page":
-            all_result["page"],
+        "bugs": all_result["items"],
+        "sit_bugs": sit_result["items"],
+        "uat_bugs": uat_result["items"],
+        "prod_bugs": prod_result["items"],
 
-        "all_page":
-            all_result["page"],
-
-        "per_page":
-            per_page,
-
-        "total":
-            all_result["total"],
-
-        "all_total":
-            all_result["total"],
-
-        "sit_total":
-            sit_result["total"],
-
-        "sit_pages":
-            sit_result["pages"],
-
-        "uat_page":
-            uat_result["page"],
-
-        "uat_total":
-            uat_result["total"],
-
-        "uat_pages":
-            uat_result["pages"],
-
-        "prod_page":
-            prod_result["page"],
-
-        "prod_total":
-            prod_result["total"],
-
-        "prod_pages":
-            prod_result["pages"],
-
-        "pages":
-            all_result["pages"],
-
-        "all_pages":
-            all_result["pages"],
-
-        "bugs":
-            all_result["items"],
-
-        "sit_bugs":
-            sit_result["items"],
-
-        "uat_bugs":
-            uat_result["items"],
-
-        "prod_bugs":
-            prod_result["items"],
+        # NEW: Full priority counts for each environment.
+        "priority_counts_by_environment": (
+            priority_counts_by_environment
+        ),
     }
+# async def get_jira_bugs(
+#     project_id: int,
+#     search: str | None = Query(
+#         default=None
+#     ),
+#     all_page: int = Query(
+#     default=1,
+#     ge=1,
+# ),
+# uat_page: int = Query(
+#     default=1,
+#     ge=1,
+# ),
+# prod_page: int = Query(
+#     default=1,
+#     ge=1,
+# ),
+# per_page: int = Query(
+#     default=50,
+#     ge=5,
+#     le=200,
+# ),
+#     db: Session = Depends(get_db),
+# ):
+
+#     # ========================================================
+#     # Project
+#     # ========================================================
+
+#     project = (
+#         db.query(Project)
+#         .filter(
+#             Project.id == project_id
+#         )
+#         .first()
+#     )
+
+#     if not project:
+#         raise HTTPException(
+#             status_code=404,
+#             detail="Project not found",
+#         )
+
+#     # ========================================================
+#     # Configuration
+#     # ========================================================
+
+#     config = (
+#         db.query(JiraConfiguration)
+#         .filter(
+#             JiraConfiguration.project_id
+#             == project_id,
+
+#             JiraConfiguration.active.is_(True),
+#         )
+#         .first()
+#     )
+
+#     if not config:
+
+#         return {
+#             "configured": False,
+#             "project_id": project_id,
+#             "project_name": project.name,
+#             "per_page": per_page,
+#             "page": all_page,
+#             "all_page": all_page,
+#             "all_total": 0,
+#             "all_pages": 0,
+#             "total": 0,
+#             "pages": 0,
+#             "sit_total": 0,
+#             "sit_pages": 0,
+#             "sit_bugs": [],
+#             "uat_page": uat_page,
+#             "uat_total": 0,
+#             "uat_pages": 0,
+#             "uat_bugs": [],
+#             "prod_page": prod_page,
+#             "prod_total": 0,
+#             "prod_pages": 0,
+#             "prod_bugs": [],
+#             "bugs": [],
+#         }
+
+#     # ========================================================
+#     # Validate Jira credentials
+#     # ========================================================
+
+#     if not config.jira_url.strip():
+#         raise HTTPException(
+#             status_code=500,
+#             detail="Jira URL is not configured.",
+#         )
+
+#     if not config.jira_email.strip():
+#         raise HTTPException(
+#             status_code=500,
+#             detail="Jira email is not configured.",
+#         )
+
+#     if not config.jira_api_token.strip():
+#         raise HTTPException(
+#             status_code=500,
+#             detail="Jira API token is not configured.",
+#         )
+
+#     if not config.jql.strip():
+#         raise HTTPException(
+#             status_code=500,
+#             detail="Jira JQL is not configured.",
+#         )
+
+#     # ========================================================
+#     # Environment configuration
+#     # ========================================================
+
+#     environment_field = (
+#         getattr(
+#             config,
+#             "environment_field",
+#             None,
+#         )
+#         or ""
+#     ).strip()
+
+#     uat_label = (
+#         config.uat_label.strip()
+#         if config.uat_label
+#         else None
+#     )
+
+#     prod_label = (
+#         config.prod_label.strip()
+#         if config.prod_label
+#         else None
+#     )
+
+#     # ========================================================
+#     # JQLs
+#     #
+#     # New configuration:
+#     #
+#     # SIT -> sit_jql
+#     # UAT -> uat_jql
+#     # PROD -> prod_jql
+#     #
+#     # Existing jql remains the fallback.
+#     # ========================================================
+
+#     sit_jql = (
+#         config.sit_jql or ""
+#     ).strip()
+
+#     uat_jql = (
+#         config.uat_jql or ""
+#     ).strip()
+
+#     prod_jql = (
+#         config.prod_jql or ""
+#     ).strip()
+
+#     # --------------------------------------------------------
+#     # Backward compatibility
+#     #
+#     # If environment-specific JQLs are not configured,
+#     # use the existing JQL and classification logic.
+#     # --------------------------------------------------------
+
+#     use_environment_jql = bool(
+#         sit_jql
+#         or uat_jql
+#         or prod_jql
+#     )
+
+#     # ========================================================
+#     # SEARCH MODE 1
+#     #
+#     # Environment-specific JQL
+#     # ========================================================
+
+#     if use_environment_jql:
+
+#         environment_queries = []
+
+#         if sit_jql:
+#             environment_queries.append(
+#                 (
+#                     "SIT",
+#                     sit_jql,
+#                 )
+#             )
+
+#         if uat_jql:
+#             environment_queries.append(
+#                 (
+#                     "UAT",
+#                     uat_jql,
+#                 )
+#             )
+
+#         if prod_jql:
+#             environment_queries.append(
+#                 (
+#                     "PROD",
+#                     prod_jql,
+#                 )
+#             )
+
+#         all_bugs_by_key = {}
+
+#         sit_bugs = []
+#         uat_bugs = []
+#         prod_bugs = []
+
+#         for (
+#             forced_environment,
+#             environment_jql,
+#         ) in environment_queries:
+
+#             final_jql = build_search_jql(
+#                 environment_jql,
+#                 search,
+#             )
+
+#             try:
+
+#                 jira_data = (
+#                     await search_jira_bugs(
+#                         jira_url=config.jira_url,
+#                         jira_email=config.jira_email,
+#                         jira_api_token=config.jira_api_token,
+#                         jql=final_jql,
+#                         environment_field=(
+#                             environment_field
+#                             or None
+#                         ),
+#                     )
+#                 )
+
+#             except Exception as exc:
+
+#                 raise HTTPException(
+#                     status_code=502,
+#                     detail=(
+#                         "Unable to fetch Jira "
+#                         f"{forced_environment} bugs: "
+#                         f"{str(exc)}"
+#                     ),
+#                 )
+
+#             for issue in jira_data.get(
+#                 "issues",
+#                 [],
+#             ):
+
+#                 bug = normalize_jira_issue(
+#                     issue=issue,
+#                     environment_field=(
+#                         environment_field
+#                     ),
+#                     uat_label=uat_label,
+#                     prod_label=prod_label,
+#                     forced_environment=(
+#                         forced_environment
+#                     ),
+#                 )
+
+#                 jira_key = bug.get(
+#                     "jira_id"
+#                 )
+
+#                 if not jira_key:
+#                     continue
+
+#                 all_bugs_by_key[
+#                     jira_key
+#                 ] = bug
+
+#                 if (
+#                     forced_environment
+#                     == "SIT"
+#                 ):
+#                     sit_bugs.append(
+#                         bug
+#                     )
+
+#                 elif (
+#                     forced_environment
+#                     == "UAT"
+#                 ):
+#                     uat_bugs.append(
+#                         bug
+#                     )
+
+#                 elif (
+#                     forced_environment
+#                     == "PROD"
+#                 ):
+#                     prod_bugs.append(
+#                         bug
+#                     )
+
+#         bugs = list(
+#             all_bugs_by_key.values()
+#         )
+
+#         all_result = paginate_jira_items(
+#             bugs,
+#             all_page,
+#             per_page,
+#         )
+
+#         sit_result = paginate_jira_items(
+#             sit_bugs,
+#             1,
+#             per_page,
+#         )
+
+#         uat_result = paginate_jira_items(
+#             uat_bugs,
+#             uat_page,
+#             per_page,
+#         )
+
+#         prod_result = paginate_jira_items(
+#             prod_bugs,
+#             prod_page,
+#             per_page,
+#         )
+
+#         return {
+#             "configured": True,
+
+#             "project_id":
+#                 project_id,
+
+#             "project_name":
+#                 project.name,
+
+#             "jql":
+#                 config.jql,
+
+#             "sit_jql":
+#                 sit_jql,
+
+#             "uat_jql":
+#                 uat_jql,
+
+#             "prod_jql":
+#                 prod_jql,
+
+#             "environment_field":
+#                 environment_field or None,
+
+#             "page":
+#                 all_result["page"],
+
+#             "all_page":
+#                 all_result["page"],
+
+#             "per_page":
+#                 per_page,
+
+#             "total":
+#                 all_result["total"],
+
+#             "all_total":
+#                 all_result["total"],
+
+#             "sit_total":
+#                 sit_result["total"],
+
+#             "sit_pages":
+#                 sit_result["pages"],
+
+#             "uat_page":
+#                 uat_result["page"],
+
+#             "uat_total":
+#                 uat_result["total"],
+
+#             "uat_pages":
+#                 uat_result["pages"],
+
+#             "prod_page":
+#                 prod_result["page"],
+
+#             "prod_total":
+#                 prod_result["total"],
+
+#             "prod_pages":
+#                 prod_result["pages"],
+
+#             "pages":
+#                 all_result["pages"],
+
+#             "all_pages":
+#                 all_result["pages"],
+
+#             "bugs":
+#                 all_result["items"],
+
+#             "sit_bugs":
+#                 sit_result["items"],
+
+#             "uat_bugs":
+#                 uat_result["items"],
+
+#             "prod_bugs":
+#                 prod_result["items"],
+#         }
+
+#     # ========================================================
+#     # SEARCH MODE 2
+#     #
+#     # Existing backward-compatible behavior
+#     # ========================================================
+
+#     jql = build_search_jql(
+#         config.jql,
+#         search,
+#     )
+
+#     try:
+
+#         jira_data = (
+#             await search_jira_bugs(
+#                 jira_url=config.jira_url,
+#                 jira_email=config.jira_email,
+#                 jira_api_token=config.jira_api_token,
+#                 jql=jql,
+#                 environment_field=(
+#                     environment_field
+#                     or None
+#                 ),
+#             )
+#         )
+
+#     except Exception as exc:
+
+#         raise HTTPException(
+#             status_code=502,
+#             detail=(
+#                 f"Unable to fetch Jira bugs: {str(exc)}"
+#             ),
+#         )
+
+#     bugs = []
+#     uat_bugs = []
+#     prod_bugs = []
+#     sit_bugs = []
+
+#     for issue in jira_data.get(
+#         "issues",
+#         [],
+#     ):
+
+#         bug = normalize_jira_issue(
+#             issue=issue,
+#             environment_field=(
+#                 environment_field
+#             ),
+#             uat_label=uat_label,
+#             prod_label=prod_label,
+#         )
+
+#         environment = (
+#             bug.get("environment")
+#         )
+
+#         if not environment:
+#             environment = "SIT"
+#             bug["environment"] = "SIT"
+
+#         bugs.append(
+#             bug
+#         )
+
+#         if environment == "UAT":
+#             uat_bugs.append(
+#                 bug
+#             )
+
+#         elif environment == "PROD":
+#             prod_bugs.append(
+#                 bug
+#             )
+
+#         else:
+#             sit_bugs.append(
+#                 bug
+#             )
+
+#     all_result = paginate_jira_items(
+#         bugs,
+#         all_page,
+#         per_page,
+#     )
+
+#     sit_result = paginate_jira_items(
+#         sit_bugs,
+#         1,
+#         per_page,
+#     )
+
+#     uat_result = paginate_jira_items(
+#         uat_bugs,
+#         uat_page,
+#         per_page,
+#     )
+
+#     prod_result = paginate_jira_items(
+#         prod_bugs,
+#         prod_page,
+#         per_page,
+#     )
+
+#     return {
+#         "configured": True,
+
+#         "project_id":
+#             project_id,
+
+#         "project_name":
+#             project.name,
+
+#         "jql":
+#             jql,
+
+#         "sit_jql":
+#             sit_jql,
+
+#         "uat_jql":
+#             uat_jql,
+
+#         "prod_jql":
+#             prod_jql,
+
+#         "environment_field":
+#             environment_field or None,
+
+#         "page":
+#             all_result["page"],
+
+#         "all_page":
+#             all_result["page"],
+
+#         "per_page":
+#             per_page,
+
+#         "total":
+#             all_result["total"],
+
+#         "all_total":
+#             all_result["total"],
+
+#         "sit_total":
+#             sit_result["total"],
+
+#         "sit_pages":
+#             sit_result["pages"],
+
+#         "uat_page":
+#             uat_result["page"],
+
+#         "uat_total":
+#             uat_result["total"],
+
+#         "uat_pages":
+#             uat_result["pages"],
+
+#         "prod_page":
+#             prod_result["page"],
+
+#         "prod_total":
+#             prod_result["total"],
+
+#         "prod_pages":
+#             prod_result["pages"],
+
+#         "pages":
+#             all_result["pages"],
+
+#         "all_pages":
+#             all_result["pages"],
+
+#         "bugs":
+#             all_result["items"],
+
+#         "sit_bugs":
+#             sit_result["items"],
+
+#         "uat_bugs":
+#             uat_result["items"],
+
+#         "prod_bugs":
+#             prod_result["items"],
+#     }
 
 
-# ============================================================
-# GET Jira Features
-# ============================================================
+# # ============================================================
+# # GET Jira Features
+# # ============================================================
 
 @router.get(
     "/{project_id}/jira/features"
